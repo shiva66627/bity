@@ -1,10 +1,10 @@
+// lib/screens/splash_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'login_page.dart';
-import 'home_page.dart';
-import 'admin_dashboard.dart';
+// No need to import the page classes if using named routing.
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -24,16 +24,16 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future.delayed(const Duration(seconds: 2)); // small splash delay
 
     try {
-      // ✅ Wait for Firebase to fully restore user session
+      // ✅ Correctly waits for the Firebase user session to resolve
       final user = await FirebaseAuth.instance.authStateChanges().first;
 
       if (!mounted) return;
 
       if (user == null) {
-        // 🚪 No session -> go to LoginPage
-        Navigator.pushAndRemoveUntil(
+        // 🚪 FIX: Navigate to LoginPage using NAMED ROUTE
+        Navigator.pushNamedAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => const LoginPage()),
+          '/login',
           (route) => false,
         );
         return;
@@ -46,28 +46,26 @@ class _SplashScreenState extends State<SplashScreen> {
           .get();
 
       if (doc.exists && doc.data()?['role'] == 'admin') {
-        // 🔑 Logged in as admin -> go to AdminDashboard
-        Navigator.pushAndRemoveUntil(
+        // 🔑 FIX: Logged in as admin -> go to AdminDashboard using NAMED ROUTE
+        Navigator.pushNamedAndRemoveUntil(
           context,
-          MaterialPageRoute(
-            builder: (_) => AdminDashboard(onThemeChanged: (_) {}),
-          ),
+          '/admin_dashboard',
           (route) => false,
         );
       } else {
-        // 👤 Normal user -> go to HomePage
-        Navigator.pushAndRemoveUntil(
+        // 👤 Normal user -> go to HomePage using NAMED ROUTE
+        Navigator.pushNamedAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => const HomePage()),
+          '/home',
           (route) => false,
         );
       }
     } catch (e) {
-      // If something goes wrong -> send to login page
+      // If something goes wrong -> send to login page using named route
       if (!mounted) return;
-      Navigator.pushAndRemoveUntil(
+      Navigator.pushNamedAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const LoginPage()),
+        '/login',
         (route) => false,
       );
     }

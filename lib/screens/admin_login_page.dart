@@ -35,12 +35,14 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
 
         if (doc.exists && doc['role'] == 'admin') {
           // ✅ Navigate to AdminDashboard and clear back stack
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(
-                builder: (_) => AdminDashboard(onThemeChanged: (_) {})),
-            (route) => false,
-          );
+         Navigator.pushAndRemoveUntil(
+  context,
+  MaterialPageRoute(
+    builder: (_) => const AdminDashboard(),
+  ),
+  (route) => false,
+);
+
         } else {
           await _auth.signOut();
           ScaffoldMessenger.of(context).showSnackBar(

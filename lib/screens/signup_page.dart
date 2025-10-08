@@ -19,6 +19,7 @@ class _SignupPageState extends State<SignupPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   bool _isLoading = false;
+  bool _obscurePassword = true; // 👁️ Toggle state
 
   /// 🔹 Signup with Email & Password
   Future<void> _signupUser() async {
@@ -174,15 +175,28 @@ class _SignupPageState extends State<SignupPage> {
               ),
               const SizedBox(height: 20),
 
-              // Password
+              // Password with Eye Toggle
               TextField(
                 controller: passwordController,
-                obscureText: true,
+                obscureText: _obscurePassword,
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.lock),
                   labelText: "Password",
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8)),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                      color: Colors.grey,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
                 ),
               ),
               const SizedBox(height: 30),

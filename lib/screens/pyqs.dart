@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:pdfx/pdfx.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 
-String normalizeDriveUrl(String url) {
+/// Normalizes Google Drive links & Firebase URLs
+String normalizeUrl(String url) {
+  if (url.contains("firebasestorage.googleapis.com")) return url;
+
   if (url.contains("drive.google.com")) {
     final regex = RegExp(r"/d/([a-zA-Z0-9_-]+)");
     final match = regex.firstMatch(url);
@@ -23,7 +28,6 @@ class PyqsPage extends StatefulWidget {
 class _PyqsPageState extends State<PyqsPage> {
   String? selectedYear, selectedSubjectId, selectedSubjectName, selectedChapterId;
 
-  /// Handle back navigation inside hierarchy
   Future<bool> _handleBack() async {
     if (selectedChapterId != null) {
       setState(() => selectedChapterId = null);
@@ -38,7 +42,7 @@ class _PyqsPageState extends State<PyqsPage> {
       setState(() => selectedYear = null);
       return false;
     }
-    return true; // allow page pop only if nothing is selected
+    return true;
   }
 
   @override
@@ -47,11 +51,11 @@ class _PyqsPageState extends State<PyqsPage> {
       onWillPop: _handleBack,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(
-            selectedSubjectName != null
-                ? "${selectedSubjectName!} PYQs"
-                : "PYQs",
-          ),
+          title: Text(selectedSubjectName != null
+              ? (selectedChapterId != null
+                  ? selectedSubjectName!
+                  : "${selectedSubjectName!} PYQs")
+              : "PYQs"),
           backgroundColor: Colors.red,
           foregroundColor: Colors.white,
           leading: IconButton(
@@ -75,97 +79,98 @@ class _PyqsPageState extends State<PyqsPage> {
   }
 
   // =================== YEAR ===================
-  Widget _buildYearSelection() {
-    final years = [
-      {"title": "1st Year", "short": "1st"},
-      {"title": "2nd Year", "short": "2nd"},
-      {"title": "3rd Year", "short": "3rd"},
-      {"title": "4th Year", "short": "4th"},
-    ];
+ 
+Widget _buildYearSelection() {
+  final years = [
+    {"title": "1st Year", "short": "1st"},
+    {"title": "2nd Year", "short": "2nd"},
+    {"title": "3rd Year", "short": "3rd"},
+    {"title": "4th Year", "short": "4th"},
+  ];
 
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Breadcrumb
-          Row(
-            children: [
-              Chip(
-                label: const Text("PYQs"),
-                avatar: const Icon(Icons.description,
-                    color: Colors.white, size: 18),
-                backgroundColor: Colors.red,
-                labelStyle: const TextStyle(color: Colors.white),
-              ),
-              const SizedBox(width: 10),
-              Chip(
-                label: const Text("Select Year"),
-                backgroundColor: Colors.grey.shade200,
-              ),
-            ],
+  // 🎨 Different background colors for each year
+  final List<Color> bgColors = [
+    Colors.red.shade50,
+    Colors.orange.shade50,
+    Colors.teal.shade50,
+    Colors.purple.shade50,
+  ];
+
+  // 🎨 Matching text colors for contrast
+  final List<Color> textColors = [
+    Colors.red.shade700,
+    Colors.orange.shade700,
+    Colors.teal.shade700,
+    Colors.purple.shade700,
+  ];
+
+  return Padding(
+    padding: const EdgeInsets.all(16.0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Chip(
+            label: const Text("PYQs"),
+            avatar: const Icon(Icons.description, color: Colors.white, size: 18),
+            backgroundColor: Colors.red,
+            labelStyle: const TextStyle(color: Colors.white),
           ),
-          const SizedBox(height: 20),
-
-          const Text(
-            "Select Year for PYQs",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 20),
-
-          // Grid of years
-          Expanded(
-            child: GridView.builder(
-              itemCount: years.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 1.1,
-              ),
-              itemBuilder: (context, index) {
-                final year = years[index];
-                return GestureDetector(
-                  onTap: () => setState(() => selectedYear = year["title"]),
-                  child: Card(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 3,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: Colors.red.shade100,
-                          radius: 30,
-                          child: Text(
-                            year["short"]!,
-                            style: const TextStyle(
-                              color: Colors.red,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          year["title"]!,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
+          const SizedBox(width: 10),
+          Chip(
+              label: Text(selectedYear ?? "Select Year"),
+              backgroundColor: Colors.grey.shade200),
+        ]),
+        const SizedBox(height: 20),
+        const Text("Select Year for PYQs",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 20),
+        Expanded(
+          child: GridView.builder(
+            itemCount: years.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: 1.1,
             ),
+            itemBuilder: (context, index) {
+              final year = years[index];
+              return GestureDetector(
+                onTap: () => setState(() => selectedYear = year["title"]),
+                child: Card(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  elevation: 3,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: bgColors[index],
+                        radius: 30,
+                        child: Text(
+                          year["short"]!,
+                          style: TextStyle(
+                              color: textColors[index],
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(year["title"]!,
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   // =================== SUBJECTS ===================
   Widget _buildSubjectList() {
@@ -175,12 +180,8 @@ class _PyqsPageState extends State<PyqsPage> {
           .where("year", isEqualTo: selectedYear)
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.data!.docs.isEmpty) {
-          return const Center(child: Text("No subjects found"));
-        }
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        if (snapshot.data!.docs.isEmpty) return const Center(child: Text("No subjects found"));
 
         return GridView.builder(
           padding: const EdgeInsets.all(16),
@@ -204,20 +205,22 @@ class _PyqsPageState extends State<PyqsPage> {
               child: Card(
                 elevation: 4,
                 clipBehavior: Clip.hardEdge,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: Stack(
                   children: [
                     Positioned.fill(
                       child: imageUrl.isNotEmpty
-                          ? Image.network(
-                              normalizeDriveUrl(imageUrl),
-                              fit: BoxFit.cover,
-                            )
+                          ? Image.network(normalizeUrl(imageUrl), fit: BoxFit.cover)
                           : Container(
                               color: Colors.red[100],
-                              child: const Icon(
-                                Icons.book,
-                                size: 60,
-                                color: Colors.red,
+                              child: Center(
+                                child: Text(
+                                  subjectName.substring(0, 1).toUpperCase(),
+                                  style: const TextStyle(
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.red),
+                                ),
                               ),
                             ),
                     ),
@@ -227,14 +230,10 @@ class _PyqsPageState extends State<PyqsPage> {
                         width: double.infinity,
                         color: Colors.redAccent.withOpacity(0.7),
                         padding: const EdgeInsets.all(6),
-                        child: Text(
-                          subjectName,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
+                        child: Text(subjectName,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, color: Colors.white)),
                       ),
                     ),
                   ],
@@ -260,17 +259,17 @@ class _PyqsPageState extends State<PyqsPage> {
         if (docs.isEmpty) return const Center(child: Text("No chapters"));
 
         return ListView.builder(
+          padding: const EdgeInsets.all(16),
           itemCount: docs.length,
           itemBuilder: (context, index) {
             final chapter = docs[index];
             final chapterName = chapter['name'] ?? 'Chapter';
 
             return Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: ListTile(
-                title: Text(chapterName),
+                title: Text(chapterName, style: const TextStyle(fontWeight: FontWeight.w500)),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                 onTap: () => setState(() => selectedChapterId = chapter.id),
               ),
@@ -291,20 +290,25 @@ class _PyqsPageState extends State<PyqsPage> {
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final docs = snapshot.data!.docs;
-        if (docs.isEmpty) return const Center(child: Text("No PYQs PDFs"));
+        if (docs.isEmpty) return const Center(child: Text("No PDFs found"));
 
         return ListView(
+          padding: const EdgeInsets.all(16),
           children: docs.map((doc) {
             final data = doc.data() as Map<String, dynamic>;
             final url = data['downloadUrl'] ?? '';
             final title = data['title'] ?? 'Untitled';
 
             return Card(
+              margin: const EdgeInsets.symmetric(vertical: 6),
               child: ListTile(
                 leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
                 title: Text(title),
+                subtitle: const Text("Tap to view"),
                 onTap: () {
-                  if (url.isNotEmpty) _openPdf(context, url, title);
+                  if (url.isNotEmpty) {
+                    _openPdf(context, url, title);
+                  }
                 },
               ),
             );
@@ -319,7 +323,7 @@ class _PyqsPageState extends State<PyqsPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => PdfViewerPage(url: normalizeDriveUrl(rawUrl), title: title),
+        builder: (_) => PdfViewerPage(url: normalizeUrl(rawUrl), title: title),
       ),
     );
   }
@@ -334,38 +338,38 @@ class PdfViewerPage extends StatefulWidget {
 }
 
 class _PdfViewerPageState extends State<PdfViewerPage> {
-  PdfController? _controller;
-  int _currentPage = 1;
-  int _totalPages = 0;
+  String? _localPath;
+  int _currentPage = 0, _totalPages = 0;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _initPdf();
+    _downloadAndLoadPdf();
   }
 
-  Future<void> _initPdf() async {
+  Future<void> _downloadAndLoadPdf() async {
     try {
-      final res = await http.get(Uri.parse(widget.url));
-      if (res.statusCode != 200) {
-        throw Exception("Failed to load PDF");
+      final dir = await getApplicationDocumentsDirectory();
+      final safeName = widget.title.replaceAll(RegExp(r'[^\w\d_-]'), '_');
+      final file = File("${dir.path}/pyqs_$safeName.pdf");
+
+      if (await file.exists()) {
+        _localPath = file.path;
+      } else {
+        final response = await http.get(Uri.parse(widget.url));
+        if (response.statusCode != 200) throw Exception('Failed to download PDF');
+        await file.writeAsBytes(response.bodyBytes, flush: true);
+        _localPath = file.path;
       }
 
-      final bytes = res.bodyBytes;
-      final doc = await PdfDocument.openData(bytes);
-
-      setState(() {
-        _controller = PdfController(
-          document: Future.value(doc),
-          initialPage: 1,
-        );
-        _totalPages = doc.pagesCount;
-      });
+      setState(() => _isLoading = false);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error loading PDF: $e")),
+          SnackBar(content: Text("Failed to load PDF: $e")),
         );
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -374,65 +378,42 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title:
-            Text(widget.title, overflow: TextOverflow.ellipsis),
+        title: Text(widget.title, overflow: TextOverflow.ellipsis),
         backgroundColor: Colors.red,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.pop(context);
-          },
-        ),
+        foregroundColor: Colors.white,
       ),
-      body: _controller == null
+      backgroundColor: Colors.white,
+      body: _isLoading || _localPath == null
           ? const Center(child: CircularProgressIndicator())
           : Stack(
               children: [
-                PdfView(
-                  controller: _controller!,
-                  scrollDirection: Axis.vertical,
-                  onPageChanged: (page) {
-                    setState(() => _currentPage = page);
-                  },
-                  builders: PdfViewBuilders<DefaultBuilderOptions>(
-                    options: const DefaultBuilderOptions(),
-                    documentLoaderBuilder: (_) =>
-                        const Center(child: CircularProgressIndicator()),
-                    pageLoaderBuilder: (_) =>
-                        const Center(child: CircularProgressIndicator()),
-                    errorBuilder: (_, error) =>
-                        Center(child: Text("Error: $error")),
-                  ),
+                PDFView(
+                  filePath: _localPath!,
+                  swipeHorizontal: false,
+                  pageFling: true,
+                  pageSnap: false,
+                  autoSpacing: false,
+                  fitPolicy: FitPolicy.WIDTH,
+                  onRender: (pages) => setState(() => _totalPages = pages ?? 0),
+                  onPageChanged: (page, total) =>
+                      setState(() => _currentPage = page ?? 0),
                 ),
-
-                // Page counter overlay
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      "$_currentPage / $_totalPages",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
+                if (_totalPages > 0)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(8)),
+                      child: Text("${_currentPage + 1} / $_totalPages",
+                          style: const TextStyle(
+                              color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                ),
               ],
             ),
     );
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
   }
 }

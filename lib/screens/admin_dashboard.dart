@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:mbbsfreaks/view_mode.dart';
+import 'package:mbbsfreaks/screens/add_schedule_page.dart';
 
 import 'admin_hierarchical_content_manager.dart' as hierarchical;
 import 'manage_admins_page.dart';
 import 'admin_quiz_uploader.dart';
+import '../services/storage_service.dart';
 
 class AdminDashboard extends StatefulWidget {
+  /// When provided, toggling dark mode here will also update the app-wide theme.
   final void Function(bool)? onThemeChanged;
 
   const AdminDashboard({super.key, this.onThemeChanged});
@@ -23,6 +27,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
   String adminEmail = '';
   String? adminPhotoUrl;
   bool isLoading = true;
+
+  /// Local-only theme flag; also informs app via [onThemeChanged]
   bool isDarkMode = false;
 
   @override
@@ -36,12 +42,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
       final user = _auth.currentUser;
       if (user != null) {
         final doc = await _firestore.collection('users').doc(user.uid).get();
-        if (doc.exists && doc['role'] == "admin") {
+        if (doc.exists && doc['role'].toString().trim() == "admin") {
           setState(() {
-            adminName = doc['fullName'] ?? 'Admin';
-            adminEmail = doc['email'] ?? user.email ?? '';
-            adminPhotoUrl = doc['photoUrl'] ?? '';
-            isDarkMode = doc['isDarkMode'] ?? false;
+            adminName = (doc.data()?['fullName'] as String?)?.trim().isNotEmpty == true
+                ? doc['fullName']
+                : 'Admin';
+            adminEmail = (doc.data()?['email'] as String?) ?? user.email ?? '';
+            adminPhotoUrl = (doc.data()?['photoUrl'] as String?) ?? '';
+            isDarkMode = (doc.data()?['isDarkMode'] as bool?) ?? false;
             isLoading = false;
           });
 
@@ -51,6 +59,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           if (mounted) {
             Navigator.pushReplacementNamed(context, '/login');
           }
+        }
+      } else {
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/login');
         }
       }
     } catch (e) {
@@ -64,33 +76,61 @@ class _AdminDashboardState extends State<AdminDashboard> {
       Navigator.pushReplacementNamed(context, '/login');
     }
   }
+  // 🛠️ Fix createdAt for admins (in case missing)
+Future<void> _fixAdminCreatedAt() async {
+  final adminsSnapshot = await _firestore
+      .collection('users')
+      .where('role', isEqualTo: 'admin')
+      .get();
+
+  for (final doc in adminsSnapshot.docs) {
+    if (!doc.data().containsKey('createdAt')) {
+      await _firestore.collection('users').doc(doc.id).update({
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+  }
+
+  if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('✅ Fixed missing createdAt for Admin accounts'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+}
+
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      // ✅ Prevent back navigation (Back button won’t log out)
-      onWillPop: () async {
-        return false; // disables going back
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text(
-            "MBBS FREAKS",
-            style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
+    final themeData = isDarkMode
+        ? ThemeData.dark(useMaterial3: true)
+        : ThemeData.light(useMaterial3: true);
+
+    return Theme(
+      data: themeData,
+      child: WillPopScope(
+        onWillPop: () async => false,
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text(
+              "MBBS FREAKS",
+              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
+            ),
+            centerTitle: true,
+            backgroundColor: Colors.red[600],
+            foregroundColor: Colors.white,
           ),
-          centerTitle: true,
-          backgroundColor: Colors.red[600],
-          foregroundColor: Colors.white,
+          drawer: _buildDrawer(),
+          body: isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _buildDashboardContent(),
         ),
-        drawer: _buildDrawer(),
-        body: isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _buildDashboardContent(),
       ),
     );
   }
 
-  /// Drawer
   Widget _buildDrawer() {
     return Drawer(
       child: ListView(
@@ -104,8 +144,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               onTap: _showProfileLinkDialog,
               child: CircleAvatar(
                 backgroundColor: Colors.white,
-                backgroundImage: adminPhotoUrl != null &&
-                        adminPhotoUrl!.isNotEmpty
+                backgroundImage: adminPhotoUrl != null && adminPhotoUrl!.isNotEmpty
                     ? NetworkImage(adminPhotoUrl!)
                     : null,
                 child: (adminPhotoUrl == null || adminPhotoUrl!.isEmpty)
@@ -114,6 +153,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
             ),
           ),
+
           ListTile(
             leading: const Icon(Icons.person_add),
             title: const Text("Promote Admin"),
@@ -122,6 +162,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               _showPromoteDialog();
             },
           ),
+
           ListTile(
             leading: const Icon(Icons.manage_accounts),
             title: const Text("Manage Admins"),
@@ -134,6 +175,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
             },
           ),
           ListTile(
+  leading: const Icon(Icons.build, color: Colors.deepPurple),
+  title: const Text("Fix Admin CreatedAt"),
+  onTap: () {
+    Navigator.pop(context);
+    _fixAdminCreatedAt();
+  },
+),
+
+
+          ListTile(
             leading: const Icon(Icons.bolt, color: Colors.purple),
             title: const Text("Add Daily Question"),
             onTap: () {
@@ -141,16 +192,71 @@ class _AdminDashboardState extends State<AdminDashboard> {
               _showDailyQuestionDialog();
             },
           ),
-          const Divider(),
+
           ListTile(
-            leading: Icon(
-              isDarkMode ? Icons.dark_mode : Icons.light_mode,
-              color: Colors.orange,
-            ),
-            title: Text(
-                isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"),
-            onTap: _toggleTheme,
+            leading: const Icon(Icons.delete, color: Colors.red),
+            title: const Text("Delete Daily Question"),
+            onTap: () {
+              Navigator.pop(context);
+              _showDeleteDailyQuestionDialog();
+            },
           ),
+
+          ListTile(
+            leading: const Icon(Icons.send, color: Colors.teal),
+            title: const Text("Send Notification"),
+            onTap: () {
+              Navigator.pop(context);
+              _showNotificationDialog();
+            },
+          ),
+
+          ListTile(
+            leading: const Icon(Icons.notifications_active_outlined, color: Colors.blue),
+            title: const Text("Manage Notifications"),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(context, '/notifications');
+            },
+          ),
+          ListTile(
+  leading: const Icon(Icons.schedule, color: Colors.indigo),
+  title: const Text("Add Schedule Plan"),
+  onTap: () {
+    Navigator.pop(context);
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AddSchedulePage()),
+    );
+  },
+),
+
+
+          const Divider(),
+
+          ListTile(
+            leading: const Icon(Icons.switch_account, color: Colors.blue),
+            title: Text(ViewMode.isUserMode ? "Switch to Admin" : "Switch to User"),
+            onTap: () {
+              setState(() {
+                ViewMode.isUserMode = !ViewMode.isUserMode;
+              });
+              Navigator.pop(context);
+
+              if (ViewMode.isUserMode) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("✅ You are now viewing as USER")),
+                );
+                Navigator.pushReplacementNamed(context, '/home');
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("🛠️ Switched back to ADMIN")),
+                );
+                Navigator.pushReplacementNamed(context, '/admin_dashboard');
+              }
+            },
+          ),
+
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
             title: const Text("Logout"),
@@ -159,80 +265,75 @@ class _AdminDashboardState extends State<AdminDashboard> {
               _logout();
             },
           ),
+
         ],
       ),
     );
   }
 
-  /// Dashboard main content
+  void _toggleTheme() {
+    setState(() {
+      isDarkMode = !isDarkMode;
+    });
+
+    final user = _auth.currentUser;
+    if (user != null) {
+      _firestore.collection("users").doc(user.uid).update({
+        "isDarkMode": isDarkMode,
+      });
+    }
+
+    widget.onThemeChanged?.call(isDarkMode);
+  }
+
   Widget _buildDashboardContent() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("Welcome, $adminName!",
-              style:
-                  const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          Text(
+            "Welcome, $adminName!",
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 8),
-          Text(adminEmail,
-              style: const TextStyle(color: Colors.grey, fontSize: 16)),
+          Text(adminEmail, style: const TextStyle(color: Colors.grey, fontSize: 16)),
           const SizedBox(height: 24),
-          const Text("Quick Actions",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+
+          const Text("Quick Actions", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                  child: _buildActionCard(
-                      "Upload Notes", Icons.upload_file, Colors.blue)),
+              Expanded(child: _buildActionCard("Upload Notes", Icons.upload_file, Colors.blue)),
               const SizedBox(width: 12),
-              Expanded(
-                  child: _buildActionCard(
-                      "Upload PYQs", Icons.upload_file, Colors.green)),
+              Expanded(child: _buildActionCard("Upload PYQs", Icons.upload_file, Colors.green)),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                  child: _buildActionCard("Upload Question Bank",
-                      Icons.upload_file, Colors.orange)),
+              Expanded(child: _buildActionCard("Upload Question Bank", Icons.upload_file, Colors.orange)),
               const SizedBox(width: 12),
-              Expanded(
-                  child: _buildActionCard(
-                      "Upload Quiz", Icons.quiz, Colors.purple)),
+              Expanded(child: _buildActionCard("Upload Quiz", Icons.quiz, Colors.purple)),
             ],
           ),
+
           const SizedBox(height: 24),
-          const Text("Manage Content",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text("Manage Content", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                child: _buildManageCard(
-                    "Manage Notes", Icons.book, Colors.blue, "notes"),
-              ),
+              Expanded(child: _buildManageCard("Manage Notes", Icons.book, Colors.blue, "notes")),
               const SizedBox(width: 12),
-              Expanded(
-                child: _buildManageCard("Manage PYQs", Icons.description,
-                    Colors.green, "pyqs"),
-              ),
+              Expanded(child: _buildManageCard("Manage PYQs", Icons.description, Colors.green, "pyqs")),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                child: _buildManageCard("Manage Question Bank",
-                    Icons.library_books, Colors.orange, "question_banks"),
-              ),
+              Expanded(child: _buildManageCard("Manage Question Bank", Icons.library_books, Colors.orange, "question_banks")),
               const SizedBox(width: 12),
-              Expanded(
-                child: _buildManageCard(
-                    "Manage Quiz", Icons.quiz, Colors.purple, "quiz"),
-              ),
+              Expanded(child: _buildManageCard("Manage Quiz", Icons.quiz, Colors.purple, "quiz")),
             ],
           ),
         ],
@@ -240,7 +341,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  /// Upload Action Card
   Widget _buildActionCard(String title, IconData icon, Color color) {
     return Card(
       elevation: 3,
@@ -255,12 +355,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           } else if (title == "Upload Question Bank") {
             _showUploadDialog("question_banks");
           } else if (title == "Upload Quiz") {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const AdminQuizUploader(),
-              ),
-            );
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminQuizUploader()));
           }
         },
         child: Padding(
@@ -269,10 +364,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
             children: [
               Icon(icon, size: 40, color: color),
               const SizedBox(height: 8),
-              Text(title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 14)),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
             ],
           ),
         ),
@@ -280,9 +376,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  /// Manage Content Card
-  Widget _buildManageCard(
-      String title, IconData icon, Color color, String category) {
+  Widget _buildManageCard(String title, IconData icon, Color color, String category) {
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -292,10 +386,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) =>
-                  hierarchical.AdminHierarchicalContentManager(
-                category: category,
-              ),
+              builder: (_) => hierarchical.AdminHierarchicalContentManager(category: category),
             ),
           );
         },
@@ -305,10 +396,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
             children: [
               Icon(icon, size: 40, color: color),
               const SizedBox(height: 8),
-              Text(title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 14)),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
             ],
           ),
         ),
@@ -316,220 +408,498 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // ======================================================
-  // Upload Dialog for Notes / PYQs / QB
-  // ======================================================
+  // ========================= UPLOAD DIALOG =========================
+
   void _showUploadDialog(String category) {
     final subjectController = TextEditingController();
-    final subjectImageController = TextEditingController();
     final chapterController = TextEditingController();
     final titleController = TextEditingController();
-    final linkController = TextEditingController();
 
     String selectedYear = "1st Year";
+    String? subjectImageUrl;
+    String? pdfUrl;
 
     final collectionMap = {
-      "notes": {
-        "subjects": "notesSubjects",
-        "chapters": "notesChapters",
-        "pdfs": "notesPdfs"
-      },
-      "pyqs": {
-        "subjects": "pyqsSubjects",
-        "chapters": "pyqsChapters",
-        "pdfs": "pyqsPdfs"
-      },
-      "question_banks": {
-        "subjects": "qbSubjects",
-        "chapters": "qbChapters",
-        "pdfs": "qbPdfs"
-      },
+      "notes": {"subjects": "notesSubjects", "chapters": "notesChapters", "pdfs": "notesPdfs"},
+      "pyqs": {"subjects": "pyqsSubjects", "chapters": "pyqsChapters", "pdfs": "pyqsPdfs"},
+      "question_banks": {"subjects": "qbSubjects", "chapters": "qbChapters", "pdfs": "qbPdfs"},
+      "quiz": {"subjects": "quizSubjects", "chapters": "quizChapters", "pdfs": "quizPdfs"},
     };
 
     final collections = collectionMap[category]!;
 
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: Text("Upload ${category.toUpperCase()}"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                value: selectedYear,
-                decoration: const InputDecoration(labelText: "Select Year"),
-                items: const [
-                  DropdownMenuItem(value: "1st Year", child: Text("1st Year")),
-                  DropdownMenuItem(value: "2nd Year", child: Text("2nd Year")),
-                  DropdownMenuItem(value: "3rd Year", child: Text("3rd Year")),
-                  DropdownMenuItem(value: "4th Year", child: Text("4th Year")),
+      builder: (_) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            title: Text("Upload ${category.toUpperCase()}"),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: selectedYear,
+                    decoration: const InputDecoration(labelText: "Select Year"),
+                    items: const [
+                      DropdownMenuItem(value: "1st Year", child: Text("1st Year")),
+                      DropdownMenuItem(value: "2nd Year", child: Text("2nd Year")),
+                      DropdownMenuItem(value: "3rd Year", child: Text("3rd Year")),
+                      DropdownMenuItem(value: "4th Year", child: Text("4th Year")),
+                    ],
+                    onChanged: (val) => setState(() => selectedYear = val!),
+                  ),
+                  TextField(
+                    controller: subjectController,
+                    decoration: const InputDecoration(labelText: "Subject Name"),
+                  ),
+                  const SizedBox(height: 8),
+
+                  if (subjectImageUrl == null)
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.image),
+                      label: const Text("Upload Subject Image"),
+                      onPressed: () async {
+                        final url = await StorageService().uploadFile("subject_images");
+                        if (url != null) {
+                          setState(() => subjectImageUrl = url);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("📎 Subject image added")),
+                          );
+                        }
+                      },
+                    )
+                  else
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Image.network(subjectImageUrl!, width: 40, height: 40, fit: BoxFit.cover),
+                      title: const Text("Subject image added"),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        onPressed: () => setState(() => subjectImageUrl = null),
+                      ),
+                    ),
+
+                  TextField(
+                    controller: chapterController,
+                    decoration: const InputDecoration(labelText: "Chapter Name"),
+                  ),
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(labelText: "PDF Title"),
+                  ),
+                  const SizedBox(height: 8),
+
+                  if (pdfUrl == null)
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.upload_file),
+                      label: const Text("Upload PDF"),
+                      onPressed: () async {
+                        final url = await StorageService().uploadFile("pdfs");
+                        if (url != null) {
+                          setState(() => pdfUrl = url);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("📎 PDF added")),
+                          );
+                        }
+                      },
+                    )
+                  else
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
+                      title: const Text("PDF added"),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        onPressed: () => setState(() => pdfUrl = null),
+                      ),
+                    ),
                 ],
-                onChanged: (val) => selectedYear = val!,
               ),
-              TextField(
-                controller: subjectController,
-                decoration: const InputDecoration(labelText: "Subject Name"),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Cancel"),
               ),
-              TextField(
-                controller: subjectImageController,
-                decoration: const InputDecoration(
-                    labelText: "Subject Image Link (Drive/URL)"),
-              ),
-              TextField(
-                controller: chapterController,
-                decoration: const InputDecoration(labelText: "Chapter Name"),
-              ),
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(labelText: "PDF Title"),
-              ),
-              TextField(
-                controller: linkController,
-                decoration: const InputDecoration(
-                    labelText: "Paste Google Drive Link"),
+              ElevatedButton(
+                onPressed: () async {
+                  if (subjectController.text.isEmpty ||
+                      chapterController.text.isEmpty ||
+                      titleController.text.isEmpty ||
+                      pdfUrl == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("⚠️ Please fill all fields")),
+                    );
+                    return;
+                  }
+
+                  try {
+                    final subjectName = subjectController.text.trim();
+
+                    // ✅ Check if subject already exists in current collection
+                    final existingQuery = await FirebaseFirestore.instance
+                        .collection(collections["subjects"]!)
+                        .where("name", isEqualTo: subjectName)
+                        .where("year", isEqualTo: selectedYear)
+                        .limit(1)
+                        .get();
+
+                    String subjectId;
+                    String finalImageUrl = subjectImageUrl ?? '';
+
+                    if (existingQuery.docs.isNotEmpty) {
+                      subjectId = existingQuery.docs.first.id;
+                      finalImageUrl = existingQuery.docs.first['imageUrl'];
+                    } else {
+                      // ➕ Create subject if not exists
+                      final newSubjectDoc = await FirebaseFirestore.instance
+                          .collection(collections["subjects"]!)
+                          .add({
+                        "name": subjectName,
+                        "imageUrl": subjectImageUrl,
+                        "year": selectedYear,
+                        "createdAt": FieldValue.serverTimestamp(),
+                      });
+                      subjectId = newSubjectDoc.id;
+                    }
+
+                    // ➕ Add chapter
+                    final chapterDoc = await FirebaseFirestore.instance
+                        .collection(collections["chapters"]!)
+                        .add({
+                      "name": chapterController.text.trim(),
+                      "subjectId": subjectId,
+                      "createdAt": FieldValue.serverTimestamp(),
+                    });
+
+                    // ➕ Add PDF
+                    await FirebaseFirestore.instance
+                        .collection(collections["pdfs"]!)
+                        .add({
+                      "title": titleController.text.trim(),
+                      "downloadUrl": pdfUrl,
+                      "chapterId": chapterDoc.id,
+                      "uploadedAt": FieldValue.serverTimestamp(),
+                    });
+
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("✅ Content uploaded successfully"), backgroundColor: Colors.green),
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("❌ Error: $e")),
+                    );
+                  }
+                },
+                child: const Text("Save"),
               ),
             ],
-          ),
+          );
+        },
+      ),
+    );
+  }
+
+
+  // ========================= Daily Question: Add =========================
+
+  void _showDailyQuestionDialog() {
+    final questionController = TextEditingController();
+    final optionControllers = List.generate(4, (_) => TextEditingController());
+    final explanationController = TextEditingController();
+    final messageController = TextEditingController();
+    String correctOption = "A";
+    String? imageUrl;
+
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            title: const Text("Add Daily Question"),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: questionController,
+                    decoration: const InputDecoration(labelText: "Question"),
+                  ),
+                  const SizedBox(height: 10),
+                  for (int i = 0; i < 4; i++)
+                    TextField(
+                      controller: optionControllers[i],
+                      decoration: InputDecoration(labelText: "Option ${i + 1}"),
+                    ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: correctOption,
+                    decoration: const InputDecoration(labelText: "Correct Answer"),
+                    items: const [
+                      DropdownMenuItem(value: "A", child: Text("Option A")),
+                      DropdownMenuItem(value: "B", child: Text("Option B")),
+                      DropdownMenuItem(value: "C", child: Text("Option C")),
+                      DropdownMenuItem(value: "D", child: Text("Option D")),
+                    ],
+                    onChanged: (val) => correctOption = val ?? "A",
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Optional image
+                  if (imageUrl == null)
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.image),
+                      label: const Text("Attach Image (Optional)"),
+                      onPressed: () async {
+                        final url = await StorageService().uploadFile("daily_questions");
+                        if (url != null) {
+                          setState(() => imageUrl = url);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("📎 Image attached")),
+                          );
+                        }
+                      },
+                    )
+                  else
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Image.network(imageUrl!, width: 40, height: 40, fit: BoxFit.cover),
+                      title: const Text("Image attached"),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        onPressed: () => setState(() => imageUrl = null),
+                      ),
+                    ),
+
+                  const SizedBox(height: 10),
+
+                  TextField(
+                    controller: explanationController,
+                    decoration: const InputDecoration(labelText: "Explanation (Optional)"),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 10),
+
+                  TextField(
+                    controller: messageController,
+                    decoration: const InputDecoration(labelText: "Message (Optional)"),
+                    maxLines: 2,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (questionController.text.trim().isEmpty ||
+                      optionControllers.any((c) => c.text.trim().isEmpty)) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("⚠️ Fill all fields")),
+                    );
+                    return;
+                  }
+
+                  final options = optionControllers.map((c) => c.text.trim()).toList();
+                  final answerMap = {"A": options[0], "B": options[1], "C": options[2], "D": options[3]};
+
+                  await FirebaseFirestore.instance.collection("daily_question").add({
+                    "question": questionController.text.trim(),
+                    "options": options,
+                    "correctAnswer": answerMap[correctOption],
+                    "imageUrl": imageUrl,
+                    "explanation": explanationController.text.trim().isNotEmpty
+                        ? explanationController.text.trim()
+                        : null,
+                    "message": messageController.text.trim().isNotEmpty
+                        ? messageController.text.trim()
+                        : null,
+                    "createdAt": FieldValue.serverTimestamp(),
+                  });
+
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("✅ Daily Question Added with details!"), backgroundColor: Colors.green),
+                  );
+                },
+                child: const Text("Save"),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // ========================= Daily Question: Delete Latest =========================
+
+  void _showDeleteDailyQuestionDialog() async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('daily_question')
+        .orderBy('createdAt', descending: true)
+        .get();
+
+    if (snapshot.docs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("⚡ No Daily Questions found to delete"), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    final doc = snapshot.docs.first;
+    final questionText = (doc.data()['question'] as String?) ?? "No question text";
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text("Delete Daily Question"),
+        content: Text(
+          "Are you sure you want to delete this Daily Question?\n\n❓ $questionText",
+          style: const TextStyle(fontSize: 14),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel")),
-          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.delete, color: Colors.white),
+            label: const Text("Delete"),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
-              if (subjectController.text.isEmpty ||
-                  subjectImageController.text.isEmpty ||
-                  chapterController.text.isEmpty ||
-                  titleController.text.isEmpty ||
-                  linkController.text.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("⚠️ Please fill all fields")),
-                );
-                return;
-              }
-
               try {
-                final subjectName = subjectController.text.trim();
-                final subjectQuery = await _firestore
-                    .collection(collections["subjects"]!)
-                    .where("name", isEqualTo: subjectName)
-                    .where("year", isEqualTo: selectedYear)
-                    .limit(1)
-                    .get();
-
-                String subjectId;
-                if (subjectQuery.docs.isEmpty) {
-                  // ✅ Added premium defaults here
-                  final docRef = await _firestore
-                      .collection(collections["subjects"]!)
-                      .add({
-                    "name": subjectName,
-                    "imageUrl": subjectImageController.text.trim(),
-                    "year": selectedYear,
-                    "createdAt": FieldValue.serverTimestamp(),
-                    "isPremium": false,        // ✅ default Free
-                    "premiumAmount": 100,      // ✅ default ₹100
-                    "unlockedUsers": [],       // ✅ empty list
-                  });
-                  subjectId = docRef.id;
-                } else {
-                  subjectId = subjectQuery.docs.first.id;
-                }
-
-                final chapterName = chapterController.text.trim();
-                final chapterQuery = await _firestore
-                    .collection(collections["chapters"]!)
-                    .where("name", isEqualTo: chapterName)
-                    .where("subjectId", isEqualTo: subjectId)
-                    .limit(1)
-                    .get();
-
-                String chapterId;
-                if (chapterQuery.docs.isEmpty) {
-                  final docRef = await _firestore
-                      .collection(collections["chapters"]!)
-                      .add({
-                    "name": chapterName,
-                    "subjectId": subjectId,
-                    "createdAt": FieldValue.serverTimestamp(),
-                  });
-                  chapterId = docRef.id;
-                } else {
-                  chapterId = chapterQuery.docs.first.id;
-                }
-
-                await _firestore.collection(collections["pdfs"]!).add({
-                  "title": titleController.text.trim(),
-                  "downloadUrl": linkController.text.trim(),
-                  "chapterId": chapterId,
-                  "uploadedBy": adminEmail,
-                  "uploadedAt": FieldValue.serverTimestamp(),
-                  "isFree": true,
-                });
+                await FirebaseFirestore.instance
+                    .collection('daily_question')
+                    .doc(doc.id)
+                    .delete();
 
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text("✅ ${category.toUpperCase()} uploaded!"),
-                    backgroundColor: Colors.green,
-                  ),
+                  const SnackBar(content: Text("🗑️ Daily Question deleted successfully"), backgroundColor: Colors.green),
                 );
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Error: $e")),
+                  SnackBar(content: Text("❌ Error deleting question: $e"), backgroundColor: Colors.red),
                 );
               }
             },
-            child: const Text("Save"),
           ),
         ],
       ),
     );
   }
 
-  // ======================================================
-  // Add Daily Question
-  // ======================================================
-  void _showDailyQuestionDialog() {
-    final questionController = TextEditingController();
-    final optionControllers = List.generate(4, (_) => TextEditingController());
-    String correctOption = "A";
+  // ========================= Notification Dialog =========================
+
+  void _showNotificationDialog() {
+    final titleController = TextEditingController();
+    final messageController = TextEditingController();
+    String? imageUrl;
+
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            title: const Text("Send Notification"),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(labelText: "Title"),
+                  ),
+                  TextField(
+                    controller: messageController,
+                    decoration: const InputDecoration(labelText: "Message"),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 8),
+
+                  if (imageUrl == null)
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.image),
+                      label: const Text("Attach Image (Optional)"),
+                      onPressed: () async {
+                        final url = await StorageService().uploadFile("notifications");
+                        if (url != null) {
+                          setState(() => imageUrl = url);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("📎 Image attached")),
+                          );
+                        }
+                      },
+                    )
+                  else
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Image.network(imageUrl!, width: 40, height: 40, fit: BoxFit.cover),
+                      title: const Text("Image attached"),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        onPressed: () => setState(() => imageUrl = null),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (titleController.text.trim().isEmpty || messageController.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("⚠️ Please fill all required fields")),
+                    );
+                    return;
+                  }
+
+                  await FirebaseFirestore.instance.collection("notifications").add({
+                    "title": titleController.text.trim(),
+                    "message": messageController.text.trim(),
+                    "imageUrl": imageUrl,
+                    "createdAt": FieldValue.serverTimestamp(),
+                  });
+
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("✅ Notification sent successfully"), backgroundColor: Colors.green),
+                  );
+                },
+                child: const Text("Send"),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // ========================= Promote to Admin =========================
+
+  void _showPromoteDialog() {
+    final emailController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text("Add Daily Question"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: questionController,
-                decoration: const InputDecoration(labelText: "Question"),
-              ),
-              const SizedBox(height: 10),
-              for (int i = 0; i < 4; i++)
-                TextField(
-                  controller: optionControllers[i],
-                  decoration: InputDecoration(labelText: "Option ${i + 1}"),
-                ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: correctOption,
-                decoration: const InputDecoration(labelText: "Correct Answer"),
-                items: const [
-                  DropdownMenuItem(value: "A", child: Text("Option A")),
-                  DropdownMenuItem(value: "B", child: Text("Option B")),
-                  DropdownMenuItem(value: "C", child: Text("Option C")),
-                  DropdownMenuItem(value: "D", child: Text("Option D")),
-                ],
-                onChanged: (val) => correctOption = val ?? "A",
-              ),
-            ],
-          ),
+        title: const Text("Promote to Admin"),
+        content: TextField(
+          controller: emailController,
+          decoration: const InputDecoration(labelText: "User Email"),
         ),
         actions: [
           TextButton(
@@ -538,100 +908,32 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
           ElevatedButton(
             onPressed: () async {
-              if (questionController.text.trim().isEmpty ||
-                  optionControllers.any((c) => c.text.trim().isEmpty)) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("⚠️ Fill all fields")),
-                );
-                return;
-              }
+              final email = emailController.text.trim();
+              if (email.isEmpty) return;
 
-              final options =
-                  optionControllers.map((c) => c.text.trim()).toList();
-              final answerMap = {
-                "A": options[0],
-                "B": options[1],
-                "C": options[2],
-                "D": options[3],
-              };
-
-              await FirebaseFirestore.instance
-                  .collection("daily_question")
-                  .add({
-                "question": questionController.text.trim(),
-                "options": options,
-                "correctAnswer": answerMap[correctOption],
-                "createdAt": FieldValue.serverTimestamp(),
-              });
-
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("✅ Daily Question Added!"),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            child: const Text("Save"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ======================================================
-  // Admin Management
-  // ======================================================
-  void _showPromoteDialog() {
-    final emailController = TextEditingController();
-    final passwordController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Promote to Admin"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: emailController,
-              decoration: const InputDecoration(labelText: "Admin Email"),
-            ),
-            TextField(
-              controller: passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: "Admin Password"),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel")),
-          ElevatedButton(
-            onPressed: () async {
               try {
-                UserCredential userCredential =
-                    await FirebaseAuth.instance.createUserWithEmailAndPassword(
-                  email: emailController.text.trim(),
-                  password: passwordController.text.trim(),
-                );
+                final snapshot = await FirebaseFirestore.instance
+                    .collection('users')
+                    .where('email', isEqualTo: email)
+                    .limit(1)
+                    .get();
 
+                if (snapshot.docs.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("❌ No user found with this email")),
+                  );
+                  return;
+                }
+
+                final userDocId = snapshot.docs.first.id;
                 await FirebaseFirestore.instance
-                    .collection("users")
-                    .doc(userCredential.user!.uid)
-                    .set({
-                  "email": emailController.text.trim(),
-                  "role": "admin",
-                  "createdAt": FieldValue.serverTimestamp(),
-                });
+                    .collection('users')
+                    .doc(userDocId)
+                    .update({'role': 'admin'});
 
                 Navigator.pop(context);
-
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text("✅ New Admin created successfully!"),
-                      backgroundColor: Colors.green),
+                  SnackBar(content: Text("✅ $email promoted to Admin"), backgroundColor: Colors.green),
                 );
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -646,6 +948,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  // ========================= Profile Picture (URL) =========================
+
   void _showProfileLinkDialog() {
     final controller = TextEditingController();
 
@@ -655,9 +959,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         title: const Text("Set Profile Picture"),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(
-            labelText: "Paste Image Link (Drive/URL)",
-          ),
+          decoration: const InputDecoration(labelText: "Paste Image Link (URL)"),
         ),
         actions: [
           TextButton(
@@ -667,11 +969,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ElevatedButton(
             onPressed: () async {
               final link = controller.text.trim();
-              if (link.isNotEmpty && _auth.currentUser != null) {
-                await _firestore
-                    .collection("users")
-                    .doc(_auth.currentUser!.uid)
-                    .update({"photoUrl": link});
+              final user = _auth.currentUser;
+
+              if (link.isNotEmpty && user != null) {
+                await _firestore.collection("users").doc(user.uid).update({"photoUrl": link});
 
                 setState(() {
                   adminPhotoUrl = link;
@@ -689,20 +990,5 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ],
       ),
     );
-  }
-
-  void _toggleTheme() {
-    setState(() {
-      isDarkMode = !isDarkMode;
-    });
-
-    widget.onThemeChanged?.call(isDarkMode);
-
-    final user = _auth.currentUser;
-    if (user != null) {
-      _firestore.collection("users").doc(user.uid).update({
-        "isDarkMode": isDarkMode,
-      });
-    }
   }
 }

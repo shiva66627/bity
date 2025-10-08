@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:pdfx/pdfx.dart';
+import 'package:pdfx/pdfx.dart'; // ✅ Only pdfx is used for PDF viewing
 import 'package:http/http.dart' as http;
-import 'payment_screen.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'payment_screen.dart';
 
-/// Convert Google Drive /view links into direct download
+/// ✅ Convert Google Drive /view links into direct download links
 String normalizeDriveUrl(String url) {
   if (url.contains("drive.google.com")) {
     final regex = RegExp(r"/d/([a-zA-Z0-9_-]+)");
@@ -36,7 +36,6 @@ class _NotesPageState extends State<NotesPage> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        // controlled back behavior: chapter -> subject -> year -> exit
         if (selectedChapterId != null) {
           setState(() => selectedChapterId = null);
           return false;
@@ -55,7 +54,9 @@ class _NotesPageState extends State<NotesPage> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(selectedSubjectName != null
-              ? "${selectedSubjectName!} Notes"
+              ? selectedChapterId != null
+                  ? selectedSubjectName!
+                  : "${selectedSubjectName!} Notes"
               : "Notes"),
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
@@ -81,25 +82,49 @@ class _NotesPageState extends State<NotesPage> {
       {"title": "4th Year", "short": "4th"},
     ];
 
-    return Padding(
+    final List<Color> bgColors = [
+      Colors.blue.shade50,
+      Colors.green.shade50,
+      Colors.orange.shade50,
+      Colors.purple.shade50,
+    ];
+
+    final List<Color> textColors = [
+      Colors.blue.shade700,
+      Colors.green.shade700,
+      Colors.orange.shade700,
+      Colors.purple.shade700,
+    ];
+
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Chip(
-            label: const Text("Notes"),
-            avatar: const Icon(Icons.notes, color: Colors.white, size: 18),
-            backgroundColor: Colors.blue,
-            labelStyle: const TextStyle(color: Colors.white),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Chip(
+              label: const Text("Notes"),
+              avatar: const Icon(Icons.notes, color: Colors.white, size: 18),
+              backgroundColor: Colors.blue,
+              labelStyle: const TextStyle(color: Colors.white),
+            ),
+            const SizedBox(width: 10),
+            Chip(
+              label: Text(selectedYear ?? "Select Year"),
+              backgroundColor: Colors.grey.shade300,
+            ),
+          ]),
+          const SizedBox(height: 20),
+          const Text(
+            "Select Year for Notes",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(width: 10),
-          Chip(label: const Text("Select Year"), backgroundColor: Colors.grey),
-        ]),
-        const SizedBox(height: 20),
-        const Text("Select Year for Notes",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 20),
-        Expanded(
-          child: GridView.builder(
+          const SizedBox(height: 20),
+
+          // 🟦 Year Grid
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
             itemCount: years.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
@@ -114,33 +139,73 @@ class _NotesPageState extends State<NotesPage> {
                 child: Card(
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
-                  elevation: 3,
+                  elevation: 2,
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       CircleAvatar(
-                        backgroundColor: Colors.purple.shade100,
-                        radius: 30,
+                        backgroundColor: bgColors[index],
+                        radius: 28,
                         child: Text(
                           year["short"]!,
-                          style: const TextStyle(
-                              color: Colors.blue,
+                          style: TextStyle(
+                              color: textColors[index],
                               fontWeight: FontWeight.bold,
                               fontSize: 18),
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       Text(year["title"]!,
                           style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w500)),
+                              fontSize: 15, fontWeight: FontWeight.w500)),
                     ],
                   ),
                 ),
               );
             },
           ),
-        ),
-      ]),
+
+          const SizedBox(height: 20),
+          const Divider(thickness: 1),
+          const SizedBox(height: 10),
+
+          // 🌟 Salient Features Section
+          const Text(
+            "⭐ Salient Features of MBBS Freaks Notes",
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _BulletPoint(text: "Colorful handwritten notes"),
+                _BulletPoint(
+                    text: "Concise and Focused on Exam-Relevant Points"),
+                _BulletPoint(text: "Short and Crisp"),
+                _BulletPoint(text: "Well Organized"),
+                _BulletPoint(
+                    text: "Covers vast number of Previous year questions"),
+                _BulletPoint(
+                    text:
+                        "Concept explanation with realistic diagrams, flowcharts and cycles"),
+                _BulletPoint(text: "Standard Textbook References"),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -152,9 +217,27 @@ class _NotesPageState extends State<NotesPage> {
           .where("year", isEqualTo: selectedYear)
           .snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final docs = snap.data!.docs;
-        if (docs.isEmpty) return const Center(child: Text("No subjects found"));
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) return Center(child: Text("Error: ${snap.error}"));
+        final docs = snap.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return const Center(child: Text("No subjects found for this year."));
+        }
+
+        final Map<String, QueryDocumentSnapshot> uniqueSubjects = {};
+        for (var doc in docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          final subjectName =
+              (data['name'] as String?)?.trim().toLowerCase() ?? '';
+          if (subjectName.isNotEmpty &&
+              !uniqueSubjects.containsKey(subjectName)) {
+            uniqueSubjects[subjectName] = doc;
+          }
+        }
+
+        final uniqueDocs = uniqueSubjects.values.toList();
 
         return GridView.builder(
           padding: const EdgeInsets.all(16),
@@ -164,9 +247,9 @@ class _NotesPageState extends State<NotesPage> {
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
           ),
-          itemCount: docs.length,
+          itemCount: uniqueDocs.length,
           itemBuilder: (context, index) {
-            final subjectDoc = docs[index];
+            final subjectDoc = uniqueDocs[index];
             final data = subjectDoc.data() as Map<String, dynamic>;
             final imageUrl = data['imageUrl'] ?? '';
             final subjectName = data['name'] ?? 'Subject';
@@ -181,26 +264,42 @@ class _NotesPageState extends State<NotesPage> {
               child: Card(
                 elevation: 4,
                 clipBehavior: Clip.hardEdge,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
                 child: Stack(
                   children: [
                     Positioned.fill(
                       child: imageUrl.isNotEmpty
-                          ? Image.network(normalizeDriveUrl(imageUrl), fit: BoxFit.cover)
+                          ? Image.network(
+                              normalizeDriveUrl(imageUrl),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(
+                                color: Colors.blue[100],
+                                child: const Icon(Icons.book,
+                                    size: 60, color: Colors.blue),
+                              ),
+                            )
                           : Container(
                               color: Colors.blue[100],
-                              child: const Icon(Icons.book, size: 60, color: Colors.blue),
+                              child: const Icon(Icons.book,
+                                  size: 60, color: Colors.blue),
                             ),
                     ),
                     Align(
                       alignment: Alignment.bottomCenter,
                       child: Container(
                         width: double.infinity,
-                        color: Colors.blueAccent.withOpacity(0.7),
-                        padding: const EdgeInsets.all(6),
+                        color: Colors.blueAccent.withOpacity(0.8),
+                        padding: const EdgeInsets.all(8),
                         child: Text(subjectName,
                             textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                                fontWeight: FontWeight.bold, color: Colors.white)),
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                fontSize: 16)),
                       ),
                     ),
                   ],
@@ -213,7 +312,7 @@ class _NotesPageState extends State<NotesPage> {
     );
   }
 
-  // =================== CHAPTER LIST (chapter-level premium) ===================
+  // =================== CHAPTER LIST ===================
   Widget _buildChapterList() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -221,37 +320,45 @@ class _NotesPageState extends State<NotesPage> {
           .where("subjectId", isEqualTo: selectedSubjectId)
           .snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final docs = snap.data!.docs;
-        if (docs.isEmpty) return const Center(child: Text("No chapters found"));
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) return Center(child: Text("Error: ${snap.error}"));
+        final docs = snap.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return const Center(child: Text("No chapters found for this subject."));
+        }
 
         return ListView.builder(
           itemCount: docs.length,
           itemBuilder: (context, index) {
             final chapterDoc = docs[index];
             final data = chapterDoc.data() as Map<String, dynamic>;
-
-            // SAFE field access
             final chapterName = data['name'] ?? 'Chapter';
-            final bool isPremium = data.containsKey('isPremium') ? (data['isPremium'] as bool) : false;
-            final int premiumAmount = data.containsKey('premiumAmount') ? (data['premiumAmount'] as int) : 100;
+            final bool isPremium =
+                data.containsKey('isPremium') ? (data['isPremium'] as bool) : false;
+            final int premiumAmount =
+                data.containsKey('premiumAmount') ? (data['premiumAmount'] as int) : 100;
 
             return Card(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: ListTile(
-                title: Text(chapterName),
+                title: Text(chapterName,
+                    style: const TextStyle(fontWeight: FontWeight.w500)),
                 subtitle: Text(
                   isPremium ? "Premium • ₹$premiumAmount" : "Free Access",
                   style: TextStyle(
-                    color: isPremium ? Colors.red : Colors.green,
+                    color: isPremium ? Colors.red.shade700 : Colors.green.shade700,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                trailing: isPremium ? const Icon(Icons.lock, color: Colors.red) : const Icon(Icons.book, color: Colors.green),
+                trailing: isPremium
+                    ? const Icon(Icons.lock, color: Colors.red)
+                    : const Icon(Icons.lock_open, color: Colors.green),
                 onTap: () {
                   if (!isPremium) {
                     setState(() => selectedChapterId = chapterDoc.id);
                   } else {
-                    // Launch your payment flow; PaymentScreen should call onPaymentSuccess when done
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -259,12 +366,14 @@ class _NotesPageState extends State<NotesPage> {
                           pdfTitle: "$chapterName Notes",
                           amount: premiumAmount,
                           onPaymentSuccess: () async {
-                            // mark chapter as unlocked (set isPremium false)
                             await FirebaseFirestore.instance
                                 .collection("notesChapters")
                                 .doc(chapterDoc.id)
                                 .update({"isPremium": false});
-                            setState(() {}); // refresh
+                            if (mounted) {
+                              Navigator.pop(context);
+                              setState(() {});
+                            }
                           },
                         ),
                       ),
@@ -287,9 +396,14 @@ class _NotesPageState extends State<NotesPage> {
           .where("chapterId", isEqualTo: selectedChapterId)
           .snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final docs = snap.data!.docs;
-        if (docs.isEmpty) return const Center(child: Text("No Notes found"));
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) return Center(child: Text("Error: ${snap.error}"));
+        final docs = snap.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return const Center(child: Text("No PDF notes found for this chapter."));
+        }
 
         return ListView.builder(
           itemCount: docs.length,
@@ -300,6 +414,7 @@ class _NotesPageState extends State<NotesPage> {
             final title = (data['title'] ?? 'Untitled') as String;
 
             return Card(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: ListTile(
                 leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
                 title: Text(title),
@@ -308,7 +423,8 @@ class _NotesPageState extends State<NotesPage> {
                   if (url.isNotEmpty) {
                     _openPdf(context, url, title);
                   } else {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No download URL provided")));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("No download URL provided")));
                   }
                 },
               ),
@@ -319,18 +435,17 @@ class _NotesPageState extends State<NotesPage> {
     );
   }
 
-  // =================== HELPERS ===================
   void _openPdf(BuildContext context, String rawUrl, String title) {
     final directUrl = normalizeDriveUrl(rawUrl);
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => PdfViewerPage(url: directUrl, title: title)),
+      MaterialPageRoute(
+          builder: (_) => PdfViewerPage(url: directUrl, title: title)),
     );
   }
 }
 
-// =================== PDF VIEWER ===================
-// Uses pdfx 2.9.2: PdfController expects Future<PdfDocument>
+// =================== PDF VIEWER (pdfx) ===================
 class PdfViewerPage extends StatefulWidget {
   final String url;
   final String title;
@@ -342,106 +457,108 @@ class PdfViewerPage extends StatefulWidget {
 }
 
 class _PdfViewerPageState extends State<PdfViewerPage> {
-  PdfController? _controller;
+  PdfControllerPinch? _pdfController;
   int _currentPage = 1;
   int _totalPages = 0;
 
   @override
   void initState() {
     super.initState();
-    _initPdf();
+    _loadPdf();
   }
 
-  Future<void> _initPdf({bool forceReload = false}) async {
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final safeName = widget.title.replaceAll(RegExp(r'[^\w\d_-]'), '_');
-      final file = File("${dir.path}/$safeName.pdf");
+  Future<void> _loadPdf() async {
+    final dir = await getApplicationDocumentsDirectory();
+    final safeFileName = 'pdf_cache_${widget.url.hashCode}.pdf';
+    final file = File("${dir.path}/$safeFileName");
 
-      // if forceReload requested, remove cached file first
-      if (forceReload && await file.exists()) {
-        try {
-          await file.delete();
-        } catch (_) {}
-      }
-
-      // open cached if exists
-      if (await file.exists()) {
-        final doc = await PdfDocument.openFile(file.path);
-        setState(() {
-          _controller = PdfController(
-            document: Future.value(doc), // required for pdfx 2.9.2
-            initialPage: 1,
-          );
-          _totalPages = doc.pagesCount;
-        });
-        return;
-      }
-
-      // download and cache
+    PdfDocument doc;
+    if (await file.exists()) {
+      doc = await PdfDocument.openFile(file.path);
+    } else {
       final response = await http.get(Uri.parse(widget.url));
-      if (response.statusCode != 200) throw Exception('Failed to download PDF (${response.statusCode})');
       await file.writeAsBytes(response.bodyBytes, flush: true);
-
-      final doc = await PdfDocument.openFile(file.path);
-      setState(() {
-        _controller = PdfController(
-          document: Future.value(doc),
-          initialPage: 1,
-        );
-        _totalPages = doc.pagesCount;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Failed to open PDF: $e"),
-            action: SnackBarAction(label: "Reload", onPressed: () => _initPdf(forceReload: true)),
-          ),
-        );
-      }
+      doc = await PdfDocument.openFile(file.path);
     }
+
+    setState(() {
+      _totalPages = doc.pagesCount;
+      _pdfController = PdfControllerPinch(document: Future.value(doc));
+    });
+  }
+
+  @override
+  void dispose() {
+    _pdfController?.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(widget.title, overflow: TextOverflow.ellipsis),
         backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
       ),
-      body: _controller == null
-          ? const Center(child: CircularProgressIndicator())
+      body: _pdfController == null
+          ? const Center(child: CircularProgressIndicator(color: Colors.blue))
           : Stack(
               children: [
-                PdfView(
-                  controller: _controller!,
+                PdfViewPinch(
+                  controller: _pdfController!,
                   scrollDirection: Axis.vertical,
-                  onPageChanged: (page) => setState(() => _currentPage = page),
-                  builders: PdfViewBuilders<DefaultBuilderOptions>(
-                    options: const DefaultBuilderOptions(),
-                    documentLoaderBuilder: (_) => const Center(child: CircularProgressIndicator()),
-                    pageLoaderBuilder: (_) => const Center(child: CircularProgressIndicator()),
-                    errorBuilder: (_, error) => Center(child: Text("Error: $error")),
-                  ),
+                  backgroundDecoration:
+                      const BoxDecoration(color: Colors.white),
+                  onPageChanged: (page) {
+                    setState(() => _currentPage = page);
+                  },
                 ),
                 Positioned(
                   top: 12,
                   right: 12,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
-                    child: Text("$_currentPage / $_totalPages", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(8)),
+                    child: Text(
+                      "$_currentPage / $_totalPages",
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
               ],
             ),
     );
   }
+}
+
+// =================== BULLET POINT WIDGET ===================
+class _BulletPoint extends StatelessWidget {
+  final String text;
+  const _BulletPoint({required this.text});
 
   @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("• ",
+              style: TextStyle(fontSize: 15, height: 1.4, color: Colors.black87)),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

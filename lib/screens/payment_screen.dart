@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class PaymentScreen extends StatefulWidget {
   final String pdfTitle;
-  final int amount; // in paise (₹1 = 100)
-  final VoidCallback? onPaymentSuccess; // ✅ Callback to unlock notes
+  final int amount; // amount in paise (₹1 = 100)
+  final VoidCallback? onPaymentSuccess;
 
   const PaymentScreen({
     super.key,
     required this.pdfTitle,
-    required this.amount, // ✅ always pass from notes.dart
+    required this.amount,
     this.onPaymentSuccess,
   });
 
@@ -18,87 +18,99 @@ class PaymentScreen extends StatefulWidget {
 }
 
 class _PaymentScreenState extends State<PaymentScreen> {
-  late Razorpay _razorpay;
+  // ✅ Your real UPI ID (PhonePe / GPay / Paytm)
+  final String _upiId = "shivakumarsomavarapu@ybl";
 
-  @override
-  void initState() {
-    super.initState();
-    _razorpay = Razorpay();
-    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
-    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
-    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
-  }
+  Future<void> _openUPIApp() async {
+    final rupees = widget.amount ~/ 100; // convert paise to rupees
 
-  void _openCheckout() {
-    var options = {
-      'key': 'rzp_test_RGfTAuTohoJpta', // 🔑 replace with your live key
-      'amount': widget.amount, // ✅ dynamic subject price
-      'name': 'MBBS Freaks',
-      'description': widget.pdfTitle,
-      'prefill': {
-        'contact': '9876543210',
-        'email': 'testuser@gmail.com',
-      },
-      'method': {
-        'upi': true,
-        'card': true,
-        'netbanking': true,
-        'wallet': true,
-      },
-      'external': {
-        'wallets': ['paytm']
-      }
-    };
-
-    try {
-      _razorpay.open(options);
-    } catch (e) {
-      debugPrint("⚠️ Razorpay error: $e");
-    }
-  }
-
-  void _handlePaymentSuccess(PaymentSuccessResponse response) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("✅ Payment Successful: ${response.paymentId}")),
+    final Uri upiUrl = Uri.parse(
+      "upi://pay?pa=$_upiId&pn=MBBS%20Freaks&am=$rupees&cu=INR&tn=${Uri.encodeComponent(widget.pdfTitle)}",
     );
 
-    // ✅ Unlock premium content in NotesPage
-    if (widget.onPaymentSuccess != null) {
-      widget.onPaymentSuccess!();
+    if (await canLaunchUrl(upiUrl)) {
+      await launchUrl(upiUrl, mode: LaunchMode.externalApplication);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("⚠️ Could not open UPI app")),
+      );
     }
-
-    Navigator.pop(context); // go back after success
   }
 
-  void _handlePaymentError(PaymentFailureResponse response) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("❌ ERROR: ${response.code} - ${response.message}"),
+  void _showPaymentDoneDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Payment Confirmation"),
+        content: const Text(
+          "After completing the payment in PhonePe / GPay / Paytm, tap below to continue.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // close dialog
+              if (widget.onPaymentSuccess != null) {
+                widget.onPaymentSuccess!();
+              }
+              Navigator.pop(context); // go back to previous screen
+            },
+            child: const Text("I have paid"),
+          ),
+        ],
       ),
     );
   }
 
-  void _handleExternalWallet(ExternalWalletResponse response) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Wallet Selected: ${response.walletName}")),
-    );
-  }
-
-  @override
-  void dispose() {
-    _razorpay.clear();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final amountInRupees = widget.amount ~/ 100; // convert paise → ₹
+    final amountInRupees = widget.amount ~/ 100;
+
     return Scaffold(
-      appBar: AppBar(title: const Text("Unlock Premium")),
-      body: Center(
-        child: ElevatedButton(
-          onPressed: _openCheckout,
-          child: Text("Pay Now ₹$amountInRupees"),
+      appBar: AppBar(
+        title: const Text("Pay with UPI"),
+        backgroundColor: Colors.blue,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SizedBox(height: 30),
+            Text(
+              widget.pdfTitle,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              "Amount: ₹$amountInRupees",
+              style: const TextStyle(fontSize: 16, color: Colors.black87),
+            ),
+            const SizedBox(height: 40),
+
+            // ✅ Pay using UPI button
+            ElevatedButton.icon(
+              onPressed: () async {
+                await _openUPIApp();
+                _showPaymentDoneDialog();
+              },
+              icon: const Icon(Icons.payment),
+              label: const Text("Pay using PhonePe / UPI"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                textStyle: const TextStyle(fontSize: 16),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+            const Text(
+              "This will open PhonePe, GPay or Paytm directly.\nAfter payment, tap “I have paid” to continue.",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+          ],
         ),
       ),
     );

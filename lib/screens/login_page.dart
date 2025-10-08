@@ -18,6 +18,7 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _isLoading = false;
   bool _isResettingPassword = false;
+  bool _obscurePassword = true; // 👁️ Password toggle state
 
   Future<void> _resetPassword() async {
     if (_emailController.text.trim().isEmpty) {
@@ -125,6 +126,8 @@ class _LoginPageState extends State<LoginPage> {
                 child: Image.asset("assets/loggos.jpeg", height: 300),
               ),
               const SizedBox(height: 32),
+
+              // 📧 Email
               TextField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
@@ -137,29 +140,51 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               const SizedBox(height: 16),
+
+              // 🔐 Password with Eye Toggle
               TextField(
                 controller: _passwordController,
-                obscureText: true,
+                obscureText: _obscurePassword,
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.lock),
                   labelText: "Password",
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                      color: Colors.grey,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
                 ),
               ),
+
               const SizedBox(height: 8),
+
+              // Forgot Password
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: _isResettingPassword ? null : _resetPassword,
                   child: _isResettingPassword
                       ? const CircularProgressIndicator(strokeWidth: 2)
-                      : const Text("Forgot Password?",
-                          style: TextStyle(color: Colors.blue)),
+                      : const Text(
+                          "Forgot Password?",
+                          style: TextStyle(color: Colors.blue),
+                        ),
                 ),
               ),
               const SizedBox(height: 16),
+
+              // 🔵 Login Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -170,30 +195,40 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   child: _isLoading
                       ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text("Login",
-                          style: TextStyle(fontSize: 18, color: Colors.white)),
+                      : const Text(
+                          "Login",
+                          style: TextStyle(fontSize: 18, color: Colors.white),
+                        ),
                 ),
               ),
+
               const SizedBox(height: 16),
+
+              // 📝 Signup
               GestureDetector(
                 onTap: () => Navigator.pushNamed(context, '/signup'),
                 child: const Text(
                   "Don't have an account? Sign up",
                   style: TextStyle(
-                      color: Colors.purple,
-                      fontWeight: FontWeight.bold,
-                      decoration: TextDecoration.underline),
+                    color: Colors.purple,
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
+                  ),
                 ),
               ),
+
               const SizedBox(height: 16),
+
+              // 🧑‍💼 Admin Login
               GestureDetector(
                 onTap: () => Navigator.pushNamed(context, '/admin_login'),
                 child: const Text(
                   "Admin Login",
                   style: TextStyle(
-                      color: Colors.red,
-                      fontWeight: FontWeight.bold,
-                      decoration: TextDecoration.underline),
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
+                  ),
                 ),
               ),
             ],

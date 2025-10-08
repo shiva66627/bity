@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/storage_service.dart'; // ✅ Firebase Storage helper
 
 class AdminHierarchicalContentManager extends StatefulWidget {
   final String category; // "notes", "pyqs", "question_banks", "quiz"
@@ -94,53 +95,74 @@ class _AdminHierarchicalContentManagerState
           /// ================== SUBJECTS ==================
           if (selectedYear != null)
             Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection(subjectsCollection)
-                    .where("year", isEqualTo: selectedYear)
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.data!.docs.isEmpty) {
-                    return const Center(child: Text("No subjects found"));
-                  }
+              child: Column(
+                children: [
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text("Add Subject"),
+                    onPressed: () => _addSubjectDialog(),
+                  ),
+                  Expanded(
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection(subjectsCollection)
+                          .where("year", isEqualTo: selectedYear)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) {
+                          return const Center(
+                              child: CircularProgressIndicator());
+                        }
+                        if (snapshot.data!.docs.isEmpty) {
+                          return const Center(child: Text("No subjects found"));
+                        }
 
-                  return ListView(
-                    children: snapshot.data!.docs.map((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      final subjectName = data["name"] ?? "Subject";
+                        return ListView(
+                          children: snapshot.data!.docs.map((doc) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            final subjectName = data["name"] ?? "Subject";
 
-                      return Card(
-                        child: ListTile(
-                          title: Text(subjectName),
-                          leading: const Icon(Icons.book),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit, color: Colors.blue),
-                                onPressed: () =>
-                                    _editSubject(doc.id, subjectName),
+                            return Card(
+                              child: ListTile(
+                                leading: data["imageUrl"] != null &&
+                                        data["imageUrl"].toString().isNotEmpty
+                                    ? CircleAvatar(
+                                        backgroundImage:
+                                            NetworkImage(data["imageUrl"]),
+                                        backgroundColor: Colors.grey[200],
+                                      )
+                                    : const Icon(Icons.book),
+                                title: Text(subjectName),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit,
+                                          color: Colors.blue),
+                                      onPressed: () =>
+                                          _editSubject(doc.id, subjectName),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete,
+                                          color: Colors.red),
+                                      onPressed: () => doc.reference.delete(),
+                                    ),
+                                  ],
+                                ),
+                                onTap: () {
+                                  setState(() {
+                                    selectedSubjectId = doc.id;
+                                    selectedChapterId = null;
+                                  });
+                                },
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => doc.reference.delete(),
-                              ),
-                            ],
-                          ),
-                          onTap: () {
-                            setState(() {
-                              selectedSubjectId = doc.id;
-                              selectedChapterId = null;
-                            });
-                          },
-                        ),
-                      );
-                    }).toList(),
-                  );
-                },
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
 
@@ -194,8 +216,8 @@ class _AdminHierarchicalContentManagerState
                               IconButton(
                                 icon: const Icon(Icons.currency_rupee,
                                     color: Colors.orange),
-                                onPressed: () => _setChapterPrice(
-                                    doc.id, premiumAmount),
+                                onPressed: () =>
+                                    _setChapterPrice(doc.id, premiumAmount),
                               ),
                               IconButton(
                                 icon: const Icon(Icons.edit, color: Colors.blue),
@@ -245,15 +267,15 @@ class _AdminHierarchicalContentManagerState
                       return Card(
                         child: ListTile(
                           title: Text(pdfTitle),
-                          leading:
-                              const Icon(Icons.picture_as_pdf, color: Colors.red),
+                          leading: const Icon(Icons.picture_as_pdf,
+                              color: Colors.red),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
                                 icon: const Icon(Icons.edit, color: Colors.blue),
-                                onPressed: () =>
-                                    _editPdf(doc.id, pdfTitle, data["downloadUrl"]),
+                                onPressed: () => _editPdf(
+                                    doc.id, pdfTitle, data["downloadUrl"]),
                               ),
                               IconButton(
                                 icon: const Icon(Icons.delete, color: Colors.red),
@@ -268,6 +290,137 @@ class _AdminHierarchicalContentManagerState
                 },
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  /// ================== ADD SUBJECT (UPGRADED) ==================
+  Future<void> _addSubjectDialog() async {
+    final subjectC = TextEditingController();
+    final chapterC = TextEditingController();
+    final pdfTitleC = TextEditingController();
+    String? subjectImageUrl;
+    String? pdfUrl;
+
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Add Subject + Chapter + PDF"),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: subjectC,
+                decoration: const InputDecoration(labelText: "Subject Name"),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.image),
+                label: const Text("Upload Subject Image"),
+                onPressed: () async {
+                  final url = await StorageService().uploadFile("subject_images");
+                  if (url != null) {
+                    subjectImageUrl = url;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("✅ Subject image uploaded")),
+                    );
+                  }
+                },
+              ),
+              const Divider(),
+              TextField(
+                controller: chapterC,
+                decoration: const InputDecoration(labelText: "Chapter Name"),
+              ),
+              TextField(
+                controller: pdfTitleC,
+                decoration: const InputDecoration(labelText: "PDF Title"),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.upload_file),
+                label: const Text("Upload PDF"),
+                onPressed: () async {
+                  final url = await StorageService().uploadFile("pdfs");
+                  if (url != null) {
+                    pdfUrl = url;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("✅ PDF uploaded")),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              final subjectName = subjectC.text.trim();
+              final chapterName = chapterC.text.trim();
+              final pdfTitle = pdfTitleC.text.trim();
+
+              if (subjectName.isEmpty ||
+                  chapterName.isEmpty ||
+                  pdfTitle.isEmpty ||
+                  subjectImageUrl == null ||
+                  pdfUrl == null ||
+                  selectedYear == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("⚠️ Fill all fields")),
+                );
+                return;
+              }
+
+              try {
+                // Add subject
+                final subjectDoc = await FirebaseFirestore.instance
+                    .collection(subjectsCollection)
+                    .add({
+                  "name": subjectName,
+                  "year": selectedYear,
+                  "imageUrl": subjectImageUrl,
+                  "createdAt": FieldValue.serverTimestamp(),
+                });
+
+                // Add chapter
+                final chapterDoc = await FirebaseFirestore.instance
+                    .collection(chaptersCollection)
+                    .add({
+                  "name": chapterName,
+                  "subjectId": subjectDoc.id,
+                  "createdAt": FieldValue.serverTimestamp(),
+                });
+
+                // Add PDF
+                await FirebaseFirestore.instance
+                    .collection(pdfsCollection)
+                    .add({
+                  "title": pdfTitle,
+                  "downloadUrl": pdfUrl,
+                  "chapterId": chapterDoc.id,
+                  "uploadedAt": FieldValue.serverTimestamp(),
+                });
+
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text("✅ Subject + Chapter + PDF added"),
+                      backgroundColor: Colors.green),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("❌ Error: $e")),
+                );
+              }
+            },
+            child: const Text("Save"),
+          ),
         ],
       ),
     );
@@ -326,23 +479,44 @@ class _AdminHierarchicalContentManagerState
     );
   }
 
-  Future<void> _editPdf(String docId, String oldTitle, String? oldLink) async {
+  Future<void> _editPdf(
+      String docId, String oldTitle, String? oldLink) async {
     final titleC = TextEditingController(text: oldTitle);
     final linkC = TextEditingController(text: oldLink ?? "");
+
     await showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text("Edit PDF"),
+        title: const Text("Edit / Upload PDF"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
-                controller: titleC,
-                decoration: const InputDecoration(labelText: "PDF Title")),
+              controller: titleC,
+              decoration: const InputDecoration(labelText: "PDF Title"),
+            ),
             TextField(
-                controller: linkC,
-                decoration:
-                    const InputDecoration(labelText: "Google Drive Link")),
+              controller: linkC,
+              decoration: const InputDecoration(labelText: "Existing Link"),
+            ),
+            const SizedBox(height: 10),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.upload_file),
+              label: const Text("Upload PDF/Image"),
+              onPressed: () async {
+                final url =
+                    await StorageService().uploadFile(pdfsCollection);
+                if (url != null) {
+                  linkC.text = url;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("✅ File uploaded to Firebase"),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+            ),
           ],
         ),
         actions: [

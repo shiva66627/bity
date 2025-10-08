@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:no_screenshot/no_screenshot.dart'; // ✅ added
 
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
@@ -14,21 +15,23 @@ import 'screens/question_bank.dart';
 import 'screens/quiz.dart';
 import 'screens/admin_login_page.dart';
 import 'screens/admin_dashboard.dart';
+import 'screens/notifications_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase
+  // ✅ Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // 👇 Enable Firebase App Check
+  // ✅ Enable Firebase App Check
   await FirebaseAppCheck.instance.activate(
     androidProvider: AndroidProvider.playIntegrity,
-    appleProvider:
-        AppleProvider.debug, // change to .appAttest for production iOS
+    appleProvider: AppleProvider.debug, // change to appAttest for production
   );
 
-  // 🔹 Always start from SplashScreen
+  // ✅ Initialize & Block Screenshots globally
+  await NoScreenshot.instance.screenshotOff();
+
   runApp(const EducationalApp(startScreen: SplashScreen()));
 }
 
@@ -37,17 +40,21 @@ class EducationalApp extends StatefulWidget {
 
   const EducationalApp({super.key, required this.startScreen});
 
+  // ✅ Gives access to the state anywhere in the app
+  static _EducationalAppState? of(BuildContext context) =>
+      context.findAncestorStateOfType<_EducationalAppState>();
+
   @override
   State<EducationalApp> createState() => _EducationalAppState();
 }
 
 class _EducationalAppState extends State<EducationalApp> {
-  ThemeMode _themeMode = ThemeMode.light;
+  ThemeMode _themeMode = ThemeMode.light; // ✅ default light mode
 
-  /// Called from AdminDashboard to change theme
-  void _toggleTheme(bool darkMode) {
+  /// ✅ Global theme change function
+  void changeTheme(ThemeMode mode) {
     setState(() {
-      _themeMode = darkMode ? ThemeMode.dark : ThemeMode.light;
+      _themeMode = mode;
     });
   }
 
@@ -55,9 +62,9 @@ class _EducationalAppState extends State<EducationalApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'MBBS Freaks',
-      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
+      theme: ThemeData.light(useMaterial3: true),
       darkTheme: ThemeData.dark(useMaterial3: true),
-      themeMode: _themeMode,
+      themeMode: _themeMode, // ✅ Controlled dynamically
       debugShowCheckedModeBanner: false,
       home: widget.startScreen,
       routes: {
@@ -70,8 +77,8 @@ class _EducationalAppState extends State<EducationalApp> {
         '/question_bank': (context) => const QuestionBankPage(),
         '/quiz': (context) => const QuizPage(),
         '/admin_login': (context) => const AdminLoginPage(),
-        '/admin_dashboard': (context) =>
-            AdminDashboard(onThemeChanged: _toggleTheme),
+        '/admin_dashboard': (context) => const AdminDashboard(),
+        '/notifications': (context) => const NotificationsPage(),
       },
     );
   }
