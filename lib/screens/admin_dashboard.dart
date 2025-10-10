@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:mbbsfreaks/view_mode.dart';
 import 'package:mbbsfreaks/screens/add_schedule_page.dart';
+import 'package:mbbsfreaks/screens/admin_premium_users_page.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import 'admin_hierarchical_content_manager.dart' as hierarchical;
 import 'manage_admins_page.dart';
@@ -76,30 +78,31 @@ class _AdminDashboardState extends State<AdminDashboard> {
       Navigator.pushReplacementNamed(context, '/login');
     }
   }
+  
   // 🛠️ Fix createdAt for admins (in case missing)
-Future<void> _fixAdminCreatedAt() async {
-  final adminsSnapshot = await _firestore
-      .collection('users')
-      .where('role', isEqualTo: 'admin')
-      .get();
+  Future<void> _fixAdminCreatedAt() async {
+    final adminsSnapshot = await _firestore
+        .collection('users')
+        .where('role', isEqualTo: 'admin')
+        .get();
 
-  for (final doc in adminsSnapshot.docs) {
-    if (!doc.data().containsKey('createdAt')) {
-      await _firestore.collection('users').doc(doc.id).update({
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+    for (final doc in adminsSnapshot.docs) {
+      if (!doc.data().containsKey('createdAt')) {
+        await _firestore.collection('users').doc(doc.id).update({
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Fixed missing createdAt for Admin accounts'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
-
-  if (mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('✅ Fixed missing createdAt for Admin accounts'),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
-}
 
 
   @override
@@ -175,13 +178,13 @@ Future<void> _fixAdminCreatedAt() async {
             },
           ),
           ListTile(
-  leading: const Icon(Icons.build, color: Colors.deepPurple),
-  title: const Text("Fix Admin CreatedAt"),
-  onTap: () {
-    Navigator.pop(context);
-    _fixAdminCreatedAt();
-  },
-),
+            leading: const Icon(Icons.build, color: Colors.deepPurple),
+            title: const Text("Fix Admin CreatedAt"),
+            onTap: () {
+              Navigator.pop(context);
+              _fixAdminCreatedAt();
+            },
+          ),
 
 
           ListTile(
@@ -220,17 +223,27 @@ Future<void> _fixAdminCreatedAt() async {
             },
           ),
           ListTile(
-  leading: const Icon(Icons.schedule, color: Colors.indigo),
-  title: const Text("Add Schedule Plan"),
-  onTap: () {
-    Navigator.pop(context);
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AddSchedulePage()),
-    );
-  },
-),
+            leading: const Icon(Icons.schedule, color: Colors.indigo),
+            title: const Text("Add Schedule Plan"),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AddSchedulePage()),
+              );
+            },
+          ),
 
+          ListTile(
+            leading: const Icon(Icons.verified_user, color: Colors.indigo),
+            title: const Text("Add Premium Users"),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AdminPremiumUsersPage()),
+              );
+            },
+          ),
 
           const Divider(),
 
@@ -409,7 +422,6 @@ Future<void> _fixAdminCreatedAt() async {
   }
 
   // ========================= UPLOAD DIALOG =========================
-
   void _showUploadDialog(String category) {
     final subjectController = TextEditingController();
     final chapterController = TextEditingController();
@@ -418,6 +430,7 @@ Future<void> _fixAdminCreatedAt() async {
     String selectedYear = "1st Year";
     String? subjectImageUrl;
     String? pdfUrl;
+    bool isPremium = false; // ✅ NEW
 
     final collectionMap = {
       "notes": {"subjects": "notesSubjects", "chapters": "notesChapters", "pdfs": "notesPdfs"},
@@ -515,6 +528,16 @@ Future<void> _fixAdminCreatedAt() async {
                         onPressed: () => setState(() => pdfUrl = null),
                       ),
                     ),
+
+                  // ✅ NEW: Premium toggle
+                  SwitchListTile(
+                    title: const Text("Mark as Premium"),
+                    subtitle: const Text("Premium PDFs will be locked for free users"),
+                    value: isPremium,
+                    onChanged: (val) {
+                      setState(() => isPremium = val);
+                    },
+                  ),
                 ],
               ),
             ),
@@ -538,7 +561,7 @@ Future<void> _fixAdminCreatedAt() async {
                   try {
                     final subjectName = subjectController.text.trim();
 
-                    // ✅ Check if subject already exists in current collection
+                    // ✅ Check if subject already exists
                     final existingQuery = await FirebaseFirestore.instance
                         .collection(collections["subjects"]!)
                         .where("name", isEqualTo: subjectName)
@@ -551,9 +574,8 @@ Future<void> _fixAdminCreatedAt() async {
 
                     if (existingQuery.docs.isNotEmpty) {
                       subjectId = existingQuery.docs.first.id;
-                      finalImageUrl = existingQuery.docs.first['imageUrl'];
+                      finalImageUrl = existingQuery.docs.first.data()['imageUrl'];
                     } else {
-                      // ➕ Create subject if not exists
                       final newSubjectDoc = await FirebaseFirestore.instance
                           .collection(collections["subjects"]!)
                           .add({
@@ -574,13 +596,14 @@ Future<void> _fixAdminCreatedAt() async {
                       "createdAt": FieldValue.serverTimestamp(),
                     });
 
-                    // ➕ Add PDF
+                    // ➕ Add PDF with Premium flag ✅
                     await FirebaseFirestore.instance
                         .collection(collections["pdfs"]!)
                         .add({
                       "title": titleController.text.trim(),
                       "downloadUrl": pdfUrl,
                       "chapterId": chapterDoc.id,
+                      "isPremium": isPremium, // ✅ ADDED
                       "uploadedAt": FieldValue.serverTimestamp(),
                     });
 
@@ -797,12 +820,26 @@ Future<void> _fixAdminCreatedAt() async {
     );
   }
 
-  // ========================= Notification Dialog =========================
+  // ========================= Profile Link Dialog (Missing implementation) =========================
+  void _showProfileLinkDialog() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("⚠️ Profile link action not yet implemented.")),
+    );
+  }
 
+  // ========================= Promote Admin Dialog (Missing implementation) =========================
+  void _showPromoteDialog() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("⚠️ Promote Admin action not yet implemented.")),
+    );
+  }
+
+  // 🚨 CORRECTED & COMPLETED: Notification Dialog with Cloud Functions Call 🚨
   void _showNotificationDialog() {
     final titleController = TextEditingController();
     final messageController = TextEditingController();
     String? imageUrl;
+    bool isSending = false; // Add state to handle loading
 
     showDialog(
       context: context,
@@ -824,21 +861,24 @@ Future<void> _fixAdminCreatedAt() async {
                     decoration: const InputDecoration(labelText: "Message"),
                     maxLines: 3,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
 
+                  // Image Upload Button/Preview
                   if (imageUrl == null)
                     ElevatedButton.icon(
                       icon: const Icon(Icons.image),
                       label: const Text("Attach Image (Optional)"),
-                      onPressed: () async {
-                        final url = await StorageService().uploadFile("notifications");
-                        if (url != null) {
-                          setState(() => imageUrl = url);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("📎 Image attached")),
-                          );
-                        }
-                      },
+                      onPressed: isSending
+                          ? null
+                          : () async {
+                              final url = await StorageService().uploadFile("notification_images");
+                              if (url != null) {
+                                setState(() => imageUrl = url);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text("📎 Image attached")),
+                                );
+                              }
+                            },
                     )
                   else
                     ListTile(
@@ -855,139 +895,85 @@ Future<void> _fixAdminCreatedAt() async {
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: isSending ? null : () => Navigator.pop(context),
                 child: const Text("Cancel"),
               ),
               ElevatedButton(
-                onPressed: () async {
-                  if (titleController.text.trim().isEmpty || messageController.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("⚠️ Please fill all required fields")),
-                    );
-                    return;
-                  }
+                onPressed: isSending
+                    ? null
+                    : () async {
+                        final title = titleController.text.trim();
+                        final body = messageController.text.trim();
 
-                  await FirebaseFirestore.instance.collection("notifications").add({
-                    "title": titleController.text.trim(),
-                    "message": messageController.text.trim(),
-                    "imageUrl": imageUrl,
-                    "createdAt": FieldValue.serverTimestamp(),
-                  });
+                        if (title.isEmpty || body.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("⚠️ Title and Message are required")),
+                          );
+                          return;
+                        }
 
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("✅ Notification sent successfully"), backgroundColor: Colors.green),
-                  );
-                },
-                child: const Text("Send"),
+                        setState(() => isSending = true);
+
+                        try {
+                          // 🚀 FIX: Set region to 'us-central1' as confirmed by your Firebase dashboard 
+                          final callable = FirebaseFunctions.instanceFor(region: 'us-central1')
+                              .httpsCallable('broadcastNotification');
+
+                          await callable.call(<String, dynamic>{
+                            'title': title,
+                            'body': body,
+                            'imageUrl': imageUrl,
+                          });
+
+                          if (mounted) {
+                            Navigator.pop(context); // Close dialog
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("✅ Notification sent successfully!"),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } on FirebaseFunctionsException catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                // Show the error code and message
+                                content: Text("❌ Error: [${e.code}] ${e.message ?? 'Unknown error'}"),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text("❌ An unexpected error occurred: $e"),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        } finally {
+                          if (mounted) {
+                            setState(() => isSending = false);
+                          }
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isSending ? Colors.grey : Colors.red[600],
+                  foregroundColor: Colors.white,
+                ),
+                child: isSending
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+                      )
+                    : const Text("Send"),
               ),
             ],
           );
         },
-      ),
-    );
-  }
-
-  // ========================= Promote to Admin =========================
-
-  void _showPromoteDialog() {
-    final emailController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Promote to Admin"),
-        content: TextField(
-          controller: emailController,
-          decoration: const InputDecoration(labelText: "User Email"),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final email = emailController.text.trim();
-              if (email.isEmpty) return;
-
-              try {
-                final snapshot = await FirebaseFirestore.instance
-                    .collection('users')
-                    .where('email', isEqualTo: email)
-                    .limit(1)
-                    .get();
-
-                if (snapshot.docs.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("❌ No user found with this email")),
-                  );
-                  return;
-                }
-
-                final userDocId = snapshot.docs.first.id;
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(userDocId)
-                    .update({'role': 'admin'});
-
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("✅ $email promoted to Admin"), backgroundColor: Colors.green),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Error: $e")),
-                );
-              }
-            },
-            child: const Text("Promote"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ========================= Profile Picture (URL) =========================
-
-  void _showProfileLinkDialog() {
-    final controller = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Set Profile Picture"),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: "Paste Image Link (URL)"),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final link = controller.text.trim();
-              final user = _auth.currentUser;
-
-              if (link.isNotEmpty && user != null) {
-                await _firestore.collection("users").doc(user.uid).update({"photoUrl": link});
-
-                setState(() {
-                  adminPhotoUrl = link;
-                });
-
-                Navigator.pop(context);
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("✅ Profile picture updated!")),
-                );
-              }
-            },
-            child: const Text("Save"),
-          ),
-        ],
       ),
     );
   }

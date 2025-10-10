@@ -187,16 +187,13 @@ class _AdminHierarchicalContentManagerState
                       final data = doc.data() as Map<String, dynamic>;
                       final chapterName = data["name"] ?? "Chapter";
                       final isPremium = data["isPremium"] ?? false;
-                      final premiumAmount = data["premiumAmount"] ?? 100;
 
                       return Card(
                         child: ListTile(
                           title: Text(chapterName),
                           leading: const Icon(Icons.layers),
                           subtitle: Text(
-                            isPremium
-                                ? "Premium • ₹$premiumAmount"
-                                : "Free Access",
+                            isPremium ? "Premium Content" : "Free Access",
                             style: TextStyle(
                                 color: isPremium ? Colors.red : Colors.green,
                                 fontWeight: FontWeight.w500),
@@ -212,12 +209,6 @@ class _AdminHierarchicalContentManagerState
                                       .doc(doc.id)
                                       .update({"isPremium": val});
                                 },
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.currency_rupee,
-                                    color: Colors.orange),
-                                onPressed: () =>
-                                    _setChapterPrice(doc.id, premiumAmount),
                               ),
                               IconButton(
                                 icon: const Icon(Icons.edit, color: Colors.blue),
@@ -295,7 +286,7 @@ class _AdminHierarchicalContentManagerState
     );
   }
 
-  /// ================== ADD SUBJECT (UPGRADED) ==================
+  /// ================== ADD SUBJECT ==================
   Future<void> _addSubjectDialog() async {
     final subjectC = TextEditingController();
     final chapterC = TextEditingController();
@@ -532,37 +523,6 @@ class _AdminHierarchicalContentManagerState
                 "title": titleC.text.trim(),
                 "downloadUrl": linkC.text.trim(),
               });
-              Navigator.pop(context);
-            },
-            child: const Text("Save"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _setChapterPrice(String chapterId, int oldAmount) async {
-    final controller = TextEditingController(text: oldAmount.toString());
-    await showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Set Chapter Price"),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: "Amount in ₹"),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel")),
-          ElevatedButton(
-            onPressed: () async {
-              final amount = int.tryParse(controller.text.trim()) ?? 100;
-              await FirebaseFirestore.instance
-                  .collection(chaptersCollection)
-                  .doc(chapterId)
-                  .update({"premiumAmount": amount});
               Navigator.pop(context);
             },
             child: const Text("Save"),

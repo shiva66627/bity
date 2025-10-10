@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:pdfx/pdfx.dart'; // ✅ Only pdfx is used for PDF viewing
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:pdfx/pdfx.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-import 'payment_screen.dart';
 
 /// ✅ Convert Google Drive /view links into direct download links
 String normalizeDriveUrl(String url) {
@@ -31,6 +31,43 @@ class _NotesPageState extends State<NotesPage> {
   String? selectedSubjectId;
   String? selectedSubjectName;
   String? selectedChapterId;
+  List<String> premiumYears = [];
+  bool refreshing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserPremiumYears();
+  }
+
+  Future<void> _loadUserPremiumYears() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      final doc =
+          await FirebaseFirestore.instance.collection("users").doc(uid).get();
+      if (doc.exists && doc.data() != null) {
+        setState(() {
+          premiumYears =
+              List<String>.from(doc.data()?['premiumYears'] ?? <String>[]);
+        });
+      }
+    }
+  }
+
+  bool get hasCurrentYearAccess =>
+      selectedYear != null && premiumYears.contains(selectedYear);
+
+  Future<void> _onRefresh() async {
+    setState(() => refreshing = true);
+    await _loadUserPremiumYears();
+    setState(() => refreshing = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("✅ Premium access refreshed"),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,8 +97,27 @@ class _NotesPageState extends State<NotesPage> {
               : "Notes"),
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
+          actions: [
+            IconButton(
+              icon: refreshing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.refresh),
+              onPressed: refreshing ? null : _onRefresh,
+              tooltip: "Refresh Premium Access",
+            ),
+          ],
         ),
-        body: _buildContent(),
+        body: RefreshIndicator(
+          onRefresh: _onRefresh,
+          child: _buildContent(),
+        ),
       ),
     );
   }
@@ -120,8 +176,6 @@ class _NotesPageState extends State<NotesPage> {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 20),
-
-          // 🟦 Year Grid
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -169,7 +223,7 @@ class _NotesPageState extends State<NotesPage> {
           const Divider(thickness: 1),
           const SizedBox(height: 10),
 
-          // 🌟 Salient Features Section
+          // 🌟 Bullet Points Section
           const Text(
             "⭐ Salient Features of MBBS Freaks Notes",
             style: TextStyle(
@@ -190,17 +244,13 @@ class _NotesPageState extends State<NotesPage> {
             child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _BulletPoint(text: "Colorful handwritten notes"),
+                _BulletPoint(text: "📝 Colorful handwritten notes"),
                 _BulletPoint(
-                    text: "Concise and Focused on Exam-Relevant Points"),
-                _BulletPoint(text: "Short and Crisp"),
-                _BulletPoint(text: "Well Organized"),
-                _BulletPoint(
-                    text: "Covers vast number of Previous year questions"),
-                _BulletPoint(
-                    text:
-                        "Concept explanation with realistic diagrams, flowcharts and cycles"),
-                _BulletPoint(text: "Standard Textbook References"),
+                    text: "📌 Concise and focused on exam-relevant points"),
+                _BulletPoint(text: "📚 Covers PYQs extensively"),
+                _BulletPoint(text: "🧠 Concept explanation with flowcharts & diagrams"),
+                _BulletPoint(text: "🔖 Standard textbook references"),
+                _BulletPoint(text: "⚡ Easy navigation year → subject → chapter → PDF"),
               ],
             ),
           ),
@@ -226,84 +276,24 @@ class _NotesPageState extends State<NotesPage> {
           return const Center(child: Text("No subjects found for this year."));
         }
 
-        final Map<String, QueryDocumentSnapshot> uniqueSubjects = {};
-        for (var doc in docs) {
-          final data = doc.data() as Map<String, dynamic>;
-          final subjectName =
-              (data['name'] as String?)?.trim().toLowerCase() ?? '';
-          if (subjectName.isNotEmpty &&
-              !uniqueSubjects.containsKey(subjectName)) {
-            uniqueSubjects[subjectName] = doc;
-          }
-        }
-
-        final uniqueDocs = uniqueSubjects.values.toList();
-
-        return GridView.builder(
+        return ListView.builder(
           padding: const EdgeInsets.all(16),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 1,
-            childAspectRatio: 1.5,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-          ),
-          itemCount: uniqueDocs.length,
+          itemCount: docs.length,
           itemBuilder: (context, index) {
-            final subjectDoc = uniqueDocs[index];
+            final subjectDoc = docs[index];
             final data = subjectDoc.data() as Map<String, dynamic>;
-            final imageUrl = data['imageUrl'] ?? '';
             final subjectName = data['name'] ?? 'Subject';
 
-            return GestureDetector(
-              onTap: () {
-                setState(() {
-                  selectedSubjectId = subjectDoc.id;
-                  selectedSubjectName = subjectName;
-                });
-              },
-              child: Card(
-                elevation: 4,
-                clipBehavior: Clip.hardEdge,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: imageUrl.isNotEmpty
-                          ? Image.network(
-                              normalizeDriveUrl(imageUrl),
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  Container(
-                                color: Colors.blue[100],
-                                child: const Icon(Icons.book,
-                                    size: 60, color: Colors.blue),
-                              ),
-                            )
-                          : Container(
-                              color: Colors.blue[100],
-                              child: const Icon(Icons.book,
-                                  size: 60, color: Colors.blue),
-                            ),
-                    ),
-                    Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Container(
-                        width: double.infinity,
-                        color: Colors.blueAccent.withOpacity(0.8),
-                        padding: const EdgeInsets.all(8),
-                        child: Text(subjectName,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                fontSize: 16)),
-                      ),
-                    ),
-                  ],
-                ),
+            return Card(
+              child: ListTile(
+                title: Text(subjectName),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  setState(() {
+                    selectedSubjectId = subjectDoc.id;
+                    selectedSubjectName = subjectName;
+                  });
+                },
               ),
             );
           },
@@ -335,51 +325,36 @@ class _NotesPageState extends State<NotesPage> {
             final chapterDoc = docs[index];
             final data = chapterDoc.data() as Map<String, dynamic>;
             final chapterName = data['name'] ?? 'Chapter';
-            final bool isPremium =
-                data.containsKey('isPremium') ? (data['isPremium'] as bool) : false;
-            final int premiumAmount =
-                data.containsKey('premiumAmount') ? (data['premiumAmount'] as int) : 100;
+            final isPremium = data['isPremium'] == true;
+            final locked = isPremium && !hasCurrentYearAccess;
 
             return Card(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: ListTile(
-                title: Text(chapterName,
-                    style: const TextStyle(fontWeight: FontWeight.w500)),
+                title: Text(chapterName),
                 subtitle: Text(
-                  isPremium ? "Premium • ₹$premiumAmount" : "Free Access",
+                  locked ? "Premium Content" : "Tap to view",
                   style: TextStyle(
-                    color: isPremium ? Colors.red.shade700 : Colors.green.shade700,
+                    color: locked ? Colors.red : Colors.green,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                trailing: isPremium
-                    ? const Icon(Icons.lock, color: Colors.red)
-                    : const Icon(Icons.lock_open, color: Colors.green),
-                onTap: () {
-                  if (!isPremium) {
-                    setState(() => selectedChapterId = chapterDoc.id);
-                  } else {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => PaymentScreen(
-                          pdfTitle: "$chapterName Notes",
-                          amount: premiumAmount,
-                          onPaymentSuccess: () async {
-                            await FirebaseFirestore.instance
-                                .collection("notesChapters")
-                                .doc(chapterDoc.id)
-                                .update({"isPremium": false});
-                            if (mounted) {
-                              Navigator.pop(context);
-                              setState(() {});
-                            }
-                          },
-                        ),
-                      ),
-                    );
-                  }
-                },
+                trailing: Icon(
+                  locked ? Icons.lock : Icons.arrow_forward_ios,
+                  color: locked ? Colors.red : Colors.black54,
+                  size: locked ? 22 : 16,
+                ),
+                onTap: locked
+                    ? () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text(
+                                  "🔒 This chapter is for Premium users of this year.")),
+                        );
+                      }
+                    : () {
+                        setState(() => selectedChapterId = chapterDoc.id);
+                      },
               ),
             );
           },
@@ -399,10 +374,14 @@ class _NotesPageState extends State<NotesPage> {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        if (snap.hasError) return Center(child: Text("Error: ${snap.error}"));
+        if (snap.hasError) {
+          return Center(child: Text("Error: ${snap.error}"));
+        }
+
         final docs = snap.data?.docs ?? [];
         if (docs.isEmpty) {
-          return const Center(child: Text("No PDF notes found for this chapter."));
+          return const Center(
+              child: Text("No PDF notes found for this chapter."));
         }
 
         return ListView.builder(
@@ -412,21 +391,42 @@ class _NotesPageState extends State<NotesPage> {
             final data = pdfDoc.data() as Map<String, dynamic>;
             final url = (data['downloadUrl'] ?? '') as String;
             final title = (data['title'] ?? 'Untitled') as String;
+            final isPremium = (data['isPremium'] ?? false) as bool;
+            final locked = isPremium && !hasCurrentYearAccess;
 
             return Card(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: ListTile(
-                leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
+                leading: Icon(
+                  locked ? Icons.lock : Icons.picture_as_pdf,
+                  color: locked ? Colors.grey : Colors.red,
+                ),
                 title: Text(title),
-                subtitle: const Text("Tap to view"),
-                onTap: () {
-                  if (url.isNotEmpty) {
-                    _openPdf(context, url, title);
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("No download URL provided")));
-                  }
-                },
+                subtitle: Text(
+                  locked ? "Premium Content" : "Tap to view",
+                  style: TextStyle(
+                    color: locked ? Colors.red : Colors.black54,
+                    fontWeight: locked ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                ),
+                onTap: locked
+                    ? () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text(
+                                  "🔒 This PDF is for Premium users of this year.")),
+                        );
+                      }
+                    : () {
+                        if (url.isNotEmpty) {
+                          _openPdf(context, url, title);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text("No download URL provided")),
+                          );
+                        }
+                      },
               ),
             );
           },
@@ -445,7 +445,7 @@ class _NotesPageState extends State<NotesPage> {
   }
 }
 
-// =================== PDF VIEWER (pdfx) ===================
+// =================== PDF VIEWER ===================
 class PdfViewerPage extends StatefulWidget {
   final String url;
   final String title;
@@ -545,7 +545,7 @@ class _BulletPoint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -554,7 +554,8 @@ class _BulletPoint extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
+              style: const TextStyle(
+                  fontSize: 14, height: 1.4, color: Colors.black87),
             ),
           ),
         ],

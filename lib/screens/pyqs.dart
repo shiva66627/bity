@@ -54,8 +54,8 @@ class _PyqsPageState extends State<PyqsPage> {
           title: Text(selectedSubjectName != null
               ? (selectedChapterId != null
                   ? selectedSubjectName!
-                  : "${selectedSubjectName!} PYQs")
-              : "PYQs"),
+                  : "${selectedSubjectName!} Practice Papers")
+              : "Practice Papers"),
           backgroundColor: Colors.red,
           foregroundColor: Colors.white,
           leading: IconButton(
@@ -79,54 +79,55 @@ class _PyqsPageState extends State<PyqsPage> {
   }
 
   // =================== YEAR ===================
- 
-Widget _buildYearSelection() {
-  final years = [
-    {"title": "1st Year", "short": "1st"},
-    {"title": "2nd Year", "short": "2nd"},
-    {"title": "3rd Year", "short": "3rd"},
-    {"title": "4th Year", "short": "4th"},
-  ];
+  Widget _buildYearSelection() {
+    final years = [
+      {"title": "1st Year", "short": "1st"},
+      {"title": "2nd Year", "short": "2nd"},
+      {"title": "3rd Year", "short": "3rd"},
+      {"title": "4th Year", "short": "4th"},
+    ];
 
-  // 🎨 Different background colors for each year
-  final List<Color> bgColors = [
-    Colors.red.shade50,
-    Colors.orange.shade50,
-    Colors.teal.shade50,
-    Colors.purple.shade50,
-  ];
+    final List<Color> bgColors = [
+      Colors.red.shade50,
+      Colors.orange.shade50,
+      Colors.teal.shade50,
+      Colors.purple.shade50,
+    ];
 
-  // 🎨 Matching text colors for contrast
-  final List<Color> textColors = [
-    Colors.red.shade700,
-    Colors.orange.shade700,
-    Colors.teal.shade700,
-    Colors.purple.shade700,
-  ];
+    final List<Color> textColors = [
+      Colors.red.shade700,
+      Colors.orange.shade700,
+      Colors.teal.shade700,
+      Colors.purple.shade700,
+    ];
 
-  return Padding(
-    padding: const EdgeInsets.all(16.0),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(children: [
-          Chip(
-            label: const Text("PYQs"),
-            avatar: const Icon(Icons.description, color: Colors.white, size: 18),
-            backgroundColor: Colors.red,
-            labelStyle: const TextStyle(color: Colors.white),
-          ),
-          const SizedBox(width: 10),
-          Chip(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Chip(
+              label: const Text("Practice Papers"),
+              avatar: const Icon(Icons.description, color: Colors.white, size: 18),
+              backgroundColor: Colors.red,
+              labelStyle: const TextStyle(color: Colors.white),
+            ),
+            const SizedBox(width: 10),
+            Chip(
               label: Text(selectedYear ?? "Select Year"),
-              backgroundColor: Colors.grey.shade200),
-        ]),
-        const SizedBox(height: 20),
-        const Text("Select Year for PYQs",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 20),
-        Expanded(
-          child: GridView.builder(
+              backgroundColor: Colors.grey.shade200,
+            ),
+          ]),
+          const SizedBox(height: 20),
+          const Text(
+            "Select Year for Practice Papers",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 20),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
             itemCount: years.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
@@ -166,11 +167,52 @@ Widget _buildYearSelection() {
               );
             },
           ),
-        ),
-      ],
-    ),
-  );
-}
+          const SizedBox(height: 20),
+          const Divider(thickness: 1),
+          const SizedBox(height: 10),
+
+          const Text(
+            "⭐ Salient Features of MBBS Freaks Practice Papers",
+            style: TextStyle(
+                fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _BulletPoint(
+                    text:
+                        "👉 Similar to real university question paper pattern"),
+                _BulletPoint(
+                    text:
+                        "👉 College wise papers categorization"),
+                _BulletPoint(
+                    text:
+                        "👉 Helps student to practice MCQs"),
+                _BulletPoint(
+                    text:
+                        "👉 Helps student to encounter variety of questions"),
+                _BulletPoint(
+                    text:
+                        "👉 Boosts exam confidence"),
+                _BulletPoint(
+                    text:
+                        "👉 Free access to everyone"),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   // =================== SUBJECTS ===================
   Widget _buildSubjectList() {
@@ -318,7 +360,6 @@ Widget _buildYearSelection() {
     );
   }
 
-  // =================== PDF VIEWER ===================
   void _openPdf(BuildContext context, String rawUrl, String title) {
     Navigator.push(
       context,
@@ -329,6 +370,7 @@ Widget _buildYearSelection() {
   }
 }
 
+// =================== PDF VIEWER ===================
 class PdfViewerPage extends StatefulWidget {
   final String url, title;
   const PdfViewerPage({super.key, required this.url, required this.title});
@@ -414,6 +456,32 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                   ),
               ],
             ),
+    );
+  }
+}
+
+// =================== BULLET POINT WIDGET ===================
+class _BulletPoint extends StatelessWidget {
+  final String text;
+  const _BulletPoint({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("• ",
+              style: TextStyle(fontSize: 15, height: 1.4, color: Colors.black87)),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

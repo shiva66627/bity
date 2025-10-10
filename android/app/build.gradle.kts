@@ -23,6 +23,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+
+        // ✅ Kotlin DSL syntax
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -35,6 +38,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = 2
         versionName = "1.0.1"
+        multiDexEnabled = true
     }
 
     signingConfigs {
@@ -47,7 +51,7 @@ android {
     }
 
     buildTypes {
-        release {
+        getByName("release") {
             signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
@@ -61,4 +65,10 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // ✅ Kotlin DSL dependency syntax
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    implementation("androidx.multidex:multidex:2.0.1")
 }

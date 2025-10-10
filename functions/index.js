@@ -1,32 +1,73 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
+// functions/index.js (Firebase Cloud Functions)
 
-const {setGlobalOptions} = require("firebase-functions");
-const {onRequest} = require("firebase-functions/https");
+const { setGlobalOptions } = require("firebase-functions");
+const { onCall } = require("firebase-functions/v2/https");
+const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
 
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
+// Initialize Firebase Admin SDK
+admin.initializeApp();
 setGlobalOptions({ maxInstances: 10 });
 
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
+/**
+ * Cloud Function to broadcast a push notification to all users subscribed to the 'all' topic.
+ * This function is callable ONLY by an authenticated Firebase user (like an Admin).
+ */
+exports.broadcastNotification = onCall(
+  {
+    cors: true,
+    // The default onCall security is used: it requires the Firebase ID token.
+    // The function is deployed in the default region (us-central1), 
+    // but the region can be explicitly set here if needed: region: 'us-central1'
+  },
+  async (request) => {
+    // 1. Authentication Check
+    if (!request.auth || !request.auth.uid) {
+      logger.warn("Attempted unauthenticated call to broadcastNotification");
+      // Throwing an Error here is correctly caught by the Dart SDK as UNAUTHENTICATED
+      throw new Error('The function must be called by an authenticated user.');
+    }
+    
+    // 2. Data Validation and extraction
+    const title = request.data.title;
+    const body = request.data.body;
+    const imageUrl = request.data.imageUrl;
 
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+    if (!title || !body) {
+      throw new Error('Title and body are required fields.');
+    }
+
+    // 3. Construct the FCM Message
+    const message = {
+      notification: {
+        title: title,
+        body: body,
+        // Firebase Cloud Messaging (FCM) uses 'image' field for notification image
+        // which falls back to data payload handling on some devices.
+        imageUrl: imageUrl || undefined, 
+      },
+      topic: "all",
+      // Add data payload for reliable image display and custom handling
+      data: {
+          title: title,
+          body: body,
+          image: imageUrl || '',
+      }
+    };
+
+    // 4. Send the Message
+    try {
+      logger.info(`Sending notification: ${title} to topic: all`);
+      
+      const response = await admin.messaging().send(message);
+      
+      logger.info("✅ Notification sent successfully:", { response: response, title: title });
+      
+      return { success: true, response: response };
+    } catch (error) {
+      logger.error("❌ Error sending notification:", error);
+      // Re-throw the error so it's reported back to the Dart client
+      throw new Error(`Failed to send notification: ${error.message}`);
+    }
+  }
+);
