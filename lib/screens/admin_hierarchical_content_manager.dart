@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/storage_service.dart'; // ✅ Firebase Storage helper
+import '../services/storage_service.dart'; // Firebase Storage helper
 
 class AdminHierarchicalContentManager extends StatefulWidget {
   final String category; // "notes", "pyqs", "question_banks", "quiz"
@@ -17,7 +17,7 @@ class _AdminHierarchicalContentManagerState
   String? selectedSubjectId;
   String? selectedChapterId;
 
-  List<String> years = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
+  final List<String> years = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
 
   late final String subjectsCollection;
   late final String chaptersCollection;
@@ -67,7 +67,7 @@ class _AdminHierarchicalContentManagerState
         children: [
           const SizedBox(height: 12),
 
-          /// YEAR DROPDOWN
+          // YEAR DROPDOWN
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: DropdownButton<String>(
@@ -75,10 +75,12 @@ class _AdminHierarchicalContentManagerState
               hint: const Text("Select Year"),
               isExpanded: true,
               items: years
-                  .map((y) => DropdownMenuItem<String>(
-                        value: y,
-                        child: Text(y),
-                      ))
+                  .map(
+                    (y) => DropdownMenuItem<String>(
+                      value: y,
+                      child: Text(y),
+                    ),
+                  )
                   .toList(),
               onChanged: (val) {
                 setState(() {
@@ -90,18 +92,25 @@ class _AdminHierarchicalContentManagerState
             ),
           ),
 
-          const Divider(),
+          const Divider(height: 1),
 
-          /// ================== SUBJECTS ==================
+          // ================== SUBJECTS ==================
           if (selectedYear != null)
             Expanded(
               child: Column(
                 children: [
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text("Add Subject"),
-                    onPressed: () => _addSubjectDialog(),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const SizedBox(width: 16),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.add),
+                        label: const Text("Add Subject"),
+                        onPressed: () => _addSubjectDialog(),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 8),
                   Expanded(
                     child: StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
@@ -109,26 +118,37 @@ class _AdminHierarchicalContentManagerState
                           .where("year", isEqualTo: selectedYear)
                           .snapshots(),
                       builder: (context, snapshot) {
-                        if (!snapshot.hasData) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
                           return const Center(
                               child: CircularProgressIndicator());
                         }
-                        if (snapshot.data!.docs.isEmpty) {
+                        if (snapshot.hasError) {
+                          return Center(
+                              child: Text("Error: ${snapshot.error}"));
+                        }
+                        final docs = snapshot.data?.docs ?? [];
+                        if (docs.isEmpty) {
                           return const Center(child: Text("No subjects found"));
                         }
 
-                        return ListView(
-                          children: snapshot.data!.docs.map((doc) {
-                            final data = doc.data() as Map<String, dynamic>;
+                        return ListView.builder(
+                          itemCount: docs.length,
+                          itemBuilder: (context, index) {
+                            final subjectDoc = docs[index];
+                            final data =
+                                subjectDoc.data() as Map<String, dynamic>;
                             final subjectName = data["name"] ?? "Subject";
+                            final imageUrl =
+                                (data["imageUrl"] ?? "").toString();
 
                             return Card(
+                              margin: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 6),
                               child: ListTile(
-                                leading: data["imageUrl"] != null &&
-                                        data["imageUrl"].toString().isNotEmpty
+                                leading: imageUrl.isNotEmpty
                                     ? CircleAvatar(
-                                        backgroundImage:
-                                            NetworkImage(data["imageUrl"]),
+                                        backgroundImage: NetworkImage(imageUrl),
                                         backgroundColor: Colors.grey[200],
                                       )
                                     : const Icon(Icons.book),
@@ -139,25 +159,26 @@ class _AdminHierarchicalContentManagerState
                                     IconButton(
                                       icon: const Icon(Icons.edit,
                                           color: Colors.blue),
-                                      onPressed: () =>
-                                          _editSubject(doc.id, subjectName),
+                                      onPressed: () => _editSubject(
+                                          subjectDoc.id, subjectName),
                                     ),
                                     IconButton(
                                       icon: const Icon(Icons.delete,
                                           color: Colors.red),
-                                      onPressed: () => doc.reference.delete(),
+                                      onPressed: () =>
+                                          subjectDoc.reference.delete(),
                                     ),
                                   ],
                                 ),
                                 onTap: () {
                                   setState(() {
-                                    selectedSubjectId = doc.id;
+                                    selectedSubjectId = subjectDoc.id;
                                     selectedChapterId = null;
                                   });
                                 },
                               ),
                             );
-                          }).toList(),
+                          },
                         );
                       },
                     ),
@@ -166,75 +187,68 @@ class _AdminHierarchicalContentManagerState
               ),
             ),
 
-          /// ================== CHAPTERS ==================
+          // ================== CHAPTERS (with drag reorder, local sort) ==================
           if (selectedSubjectId != null)
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection(chaptersCollection)
                     .where("subjectId", isEqualTo: selectedSubjectId)
+                    // NOTE: no .orderBy('order') to avoid composite index
                     .snapshots(),
                 builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  if (snapshot.data!.docs.isEmpty) {
+                  if (snapshot.hasError) {
+                    return Center(child: Text("Error: ${snapshot.error}"));
+                  }
+                  var docs = snapshot.data?.docs.toList() ?? [];
+                  if (docs.isEmpty) {
                     return const Center(child: Text("No chapters found"));
                   }
 
-                  return ListView(
-                    children: snapshot.data!.docs.map((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      final chapterName = data["name"] ?? "Chapter";
-                      final isPremium = data["isPremium"] ?? false;
+                  // Sort locally by 'order' (nulls last)
+                  docs.sort((a, b) {
+                    final ma = (a.data() as Map<String, dynamic>);
+                    final mb = (b.data() as Map<String, dynamic>);
+                    final oa = (ma['order'] is num) ? ma['order'] as num : 1e9;
+                    final ob = (mb['order'] is num) ? mb['order'] as num : 1e9;
+                    return oa.compareTo(ob);
+                  });
 
-                      return Card(
-                        child: ListTile(
-                          title: Text(chapterName),
-                          leading: const Icon(Icons.layers),
-                          subtitle: Text(
-                            isPremium ? "Premium Content" : "Free Access",
-                            style: TextStyle(
-                                color: isPremium ? Colors.red : Colors.green,
-                                fontWeight: FontWeight.w500),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Switch(
-                                value: isPremium,
-                                onChanged: (val) {
-                                  FirebaseFirestore.instance
-                                      .collection(chaptersCollection)
-                                      .doc(doc.id)
-                                      .update({"isPremium": val});
-                                },
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.edit, color: Colors.blue),
-                                onPressed: () =>
-                                    _editChapter(doc.id, chapterName),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => doc.reference.delete(),
-                              ),
-                            ],
-                          ),
-                          onTap: () {
-                            setState(() {
-                              selectedChapterId = doc.id;
-                            });
-                          },
-                        ),
-                      );
-                    }).toList(),
+                  return ReorderableListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: docs.length,
+                    onReorder: (oldIndex, newIndex) async {
+                      if (newIndex > oldIndex) newIndex--;
+
+                      // Reorder locally
+                      final moved = docs.removeAt(oldIndex);
+                      docs.insert(newIndex, moved);
+
+                      // Persist new order back to Firestore
+                      // We use 0..n-1 as 'order' values
+                      final batch =
+                          FirebaseFirestore.instance.batch();
+                      for (int i = 0; i < docs.length; i++) {
+                        final ref = FirebaseFirestore.instance
+                            .collection(chaptersCollection)
+                            .doc(docs[i].id);
+                        batch.update(ref, {"order": i});
+                      }
+                      await batch.commit();
+                    },
+                    itemBuilder: (context, index) {
+                      final doc = docs[index];
+                      return _buildChapterTile(doc);
+                    },
                   );
                 },
               ),
             ),
 
-          /// ================== PDFs ==================
+          // ================== PDFs ==================
           if (selectedChapterId != null)
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
@@ -243,19 +257,29 @@ class _AdminHierarchicalContentManagerState
                     .where("chapterId", isEqualTo: selectedChapterId)
                     .snapshots(),
                 builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  if (snapshot.data!.docs.isEmpty) {
+                  if (snapshot.hasError) {
+                    return Center(child: Text("Error: ${snapshot.error}"));
+                  }
+
+                  final docs = snapshot.data?.docs ?? [];
+                  if (docs.isEmpty) {
                     return const Center(child: Text("No PDFs found"));
                   }
 
-                  return ListView(
-                    children: snapshot.data!.docs.map((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      final pdfTitle = data["title"] ?? "PDF";
+                  return ListView.builder(
+                    itemCount: docs.length,
+                    itemBuilder: (context, index) {
+                      final pdfDoc = docs[index];
+                      final data =
+                          pdfDoc.data() as Map<String, dynamic>;
+                      final pdfTitle = (data["title"] ?? "PDF").toString();
 
                       return Card(
+                        margin: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 6),
                         child: ListTile(
                           title: Text(pdfTitle),
                           leading: const Icon(Icons.picture_as_pdf,
@@ -266,17 +290,17 @@ class _AdminHierarchicalContentManagerState
                               IconButton(
                                 icon: const Icon(Icons.edit, color: Colors.blue),
                                 onPressed: () => _editPdf(
-                                    doc.id, pdfTitle, data["downloadUrl"]),
+                                    pdfDoc.id, pdfTitle, data["downloadUrl"]),
                               ),
                               IconButton(
                                 icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => doc.reference.delete(),
+                                onPressed: () => pdfDoc.reference.delete(),
                               ),
                             ],
                           ),
                         ),
                       );
-                    }).toList(),
+                    },
                   );
                 },
               ),
@@ -286,11 +310,67 @@ class _AdminHierarchicalContentManagerState
     );
   }
 
-  /// ================== ADD SUBJECT ==================
+  // ================== CHAPTER TILE ==================
+  Widget _buildChapterTile(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final chapterName = (data["name"] ?? "Chapter").toString();
+    final isPremium = data["isPremium"] == true;
+    final order = (data["order"] is num) ? data["order"] as num : null;
+
+    return Card(
+      key: ValueKey(doc.id),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: ListTile(
+        leading: const Icon(Icons.drag_handle),
+        title: Text(
+          order == null ? chapterName : "$order. $chapterName",
+        ),
+        subtitle: Text(
+          isPremium ? "Premium Content" : "Free Access",
+          style: TextStyle(
+            color: isPremium ? Colors.red : Colors.green,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Switch(
+              value: isPremium,
+              onChanged: (val) {
+                FirebaseFirestore.instance
+                    .collection(chaptersCollection)
+                    .doc(doc.id)
+                    .update({"isPremium": val});
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.edit, color: Colors.blue),
+              onPressed: () =>
+                  _editChapter(doc.id, chapterName, order?.toInt() ?? 0),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red),
+              onPressed: () => doc.reference.delete(),
+            ),
+          ],
+        ),
+        onTap: () {
+          setState(() {
+            selectedChapterId = doc.id;
+          });
+        },
+      ),
+    );
+  }
+
+  // ================== ADD SUBJECT (with first chapter + PDF) ==================
   Future<void> _addSubjectDialog() async {
     final subjectC = TextEditingController();
     final chapterC = TextEditingController();
+    final orderC = TextEditingController(text: "0");
     final pdfTitleC = TextEditingController();
+
     String? subjectImageUrl;
     String? pdfUrl;
 
@@ -311,19 +391,28 @@ class _AdminHierarchicalContentManagerState
                 icon: const Icon(Icons.image),
                 label: const Text("Upload Subject Image"),
                 onPressed: () async {
-                  final url = await StorageService().uploadFile("subject_images");
+                  final url =
+                      await StorageService().uploadFile("subject_images");
                   if (url != null) {
                     subjectImageUrl = url;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("✅ Subject image uploaded")),
-                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text("✅ Subject image uploaded")),
+                      );
+                    }
                   }
                 },
               ),
-              const Divider(),
+              const Divider(height: 24),
               TextField(
                 controller: chapterC,
                 decoration: const InputDecoration(labelText: "Chapter Name"),
+              ),
+              TextField(
+                controller: orderC,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: "Chapter Order"),
               ),
               TextField(
                 controller: pdfTitleC,
@@ -337,9 +426,11 @@ class _AdminHierarchicalContentManagerState
                   final url = await StorageService().uploadFile("pdfs");
                   if (url != null) {
                     pdfUrl = url;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("✅ PDF uploaded")),
-                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("✅ PDF uploaded")),
+                      );
+                    }
                   }
                 },
               ),
@@ -355,6 +446,7 @@ class _AdminHierarchicalContentManagerState
               final subjectName = subjectC.text.trim();
               final chapterName = chapterC.text.trim();
               final pdfTitle = pdfTitleC.text.trim();
+              final orderVal = int.tryParse(orderC.text.trim()) ?? 0;
 
               if (subjectName.isEmpty ||
                   chapterName.isEmpty ||
@@ -362,15 +454,17 @@ class _AdminHierarchicalContentManagerState
                   subjectImageUrl == null ||
                   pdfUrl == null ||
                   selectedYear == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("⚠️ Fill all fields")),
-                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("⚠️ Fill all fields")),
+                  );
+                }
                 return;
               }
 
               try {
                 // Add subject
-                final subjectDoc = await FirebaseFirestore.instance
+                final subjectRef = await FirebaseFirestore.instance
                     .collection(subjectsCollection)
                     .add({
                   "name": subjectName,
@@ -379,35 +473,42 @@ class _AdminHierarchicalContentManagerState
                   "createdAt": FieldValue.serverTimestamp(),
                 });
 
-                // Add chapter
-                final chapterDoc = await FirebaseFirestore.instance
+                // Add chapter (with order)
+                final chapterRef = await FirebaseFirestore.instance
                     .collection(chaptersCollection)
                     .add({
                   "name": chapterName,
-                  "subjectId": subjectDoc.id,
+                  "subjectId": subjectRef.id,
+                  "order": orderVal,
+                  "isPremium": false,
                   "createdAt": FieldValue.serverTimestamp(),
                 });
 
-                // Add PDF
+                // Add PDF entry
                 await FirebaseFirestore.instance
                     .collection(pdfsCollection)
                     .add({
                   "title": pdfTitle,
                   "downloadUrl": pdfUrl,
-                  "chapterId": chapterDoc.id,
+                  "chapterId": chapterRef.id,
                   "uploadedAt": FieldValue.serverTimestamp(),
                 });
 
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
                       content: Text("✅ Subject + Chapter + PDF added"),
-                      backgroundColor: Colors.green),
-                );
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("❌ Error: $e")),
-                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("❌ Error: $e")),
+                  );
+                }
               }
             },
             child: const Text("Save"),
@@ -417,14 +518,17 @@ class _AdminHierarchicalContentManagerState
     );
   }
 
-  /// ================== EDIT HELPERS ==================
+  // ================== EDIT SUBJECT ==================
   Future<void> _editSubject(String docId, String oldName) async {
     final controller = TextEditingController(text: oldName);
     await showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text("Edit Subject"),
-        content: TextField(controller: controller),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: "Subject Name"),
+        ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
@@ -435,7 +539,7 @@ class _AdminHierarchicalContentManagerState
                   .collection(subjectsCollection)
                   .doc(docId)
                   .update({"name": controller.text.trim()});
-              Navigator.pop(context);
+              if (context.mounted) Navigator.pop(context);
             },
             child: const Text("Save"),
           ),
@@ -444,13 +548,30 @@ class _AdminHierarchicalContentManagerState
     );
   }
 
-  Future<void> _editChapter(String docId, String oldName) async {
-    final controller = TextEditingController(text: oldName);
+  // ================== EDIT CHAPTER (name + order) ==================
+  Future<void> _editChapter(String docId, String oldName, int oldOrder) async {
+    final nameC = TextEditingController(text: oldName);
+    final orderC = TextEditingController(text: oldOrder.toString());
     await showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text("Edit Chapter"),
-        content: TextField(controller: controller),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameC,
+              decoration:
+                  const InputDecoration(labelText: "Chapter Name"),
+            ),
+            TextField(
+              controller: orderC,
+              keyboardType: TextInputType.number,
+              decoration:
+                  const InputDecoration(labelText: "Order Number"),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
@@ -460,8 +581,11 @@ class _AdminHierarchicalContentManagerState
               await FirebaseFirestore.instance
                   .collection(chaptersCollection)
                   .doc(docId)
-                  .update({"name": controller.text.trim()});
-              Navigator.pop(context);
+                  .update({
+                "name": nameC.text.trim(),
+                "order": int.tryParse(orderC.text.trim()) ?? oldOrder,
+              });
+              if (context.mounted) Navigator.pop(context);
             },
             child: const Text("Save"),
           ),
@@ -470,6 +594,7 @@ class _AdminHierarchicalContentManagerState
     );
   }
 
+  // ================== EDIT / UPLOAD PDF ==================
   Future<void> _editPdf(
       String docId, String oldTitle, String? oldLink) async {
     final titleC = TextEditingController(text: oldTitle);
@@ -495,16 +620,17 @@ class _AdminHierarchicalContentManagerState
               icon: const Icon(Icons.upload_file),
               label: const Text("Upload PDF/Image"),
               onPressed: () async {
-                final url =
-                    await StorageService().uploadFile(pdfsCollection);
+                final url = await StorageService().uploadFile(pdfsCollection);
                 if (url != null) {
                   linkC.text = url;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("✅ File uploaded to Firebase"),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("✅ File uploaded to Firebase"),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
                 }
               },
             ),
@@ -523,7 +649,7 @@ class _AdminHierarchicalContentManagerState
                 "title": titleC.text.trim(),
                 "downloadUrl": linkC.text.trim(),
               });
-              Navigator.pop(context);
+              if (context.mounted) Navigator.pop(context);
             },
             child: const Text("Save"),
           ),

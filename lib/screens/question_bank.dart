@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:pdfx/pdfx.dart'; // ✅ use pdfx instead of flutter_pdfview
+import 'package:pdfx/pdfx.dart'; // ✅ use pdfx
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
@@ -167,7 +167,6 @@ class _QuestionBankPageState extends State<QuestionBankPage> {
           const SizedBox(height: 20),
           const Divider(thickness: 1),
           const SizedBox(height: 10),
-
           const Text(
             "⭐ Salient Features of MBBS Freaks Question Bank",
             style: TextStyle(
@@ -285,7 +284,7 @@ class _QuestionBankPageState extends State<QuestionBankPage> {
     );
   }
 
-  // =================== CHAPTERS (open PDF directly) ===================
+  // =================== CHAPTERS (sorted by "order" locally) ===================
   Widget _buildChapterList() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -294,13 +293,26 @@ class _QuestionBankPageState extends State<QuestionBankPage> {
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        if (snapshot.data!.docs.isEmpty) return const Center(child: Text("No chapters"));
+
+        var docs = snapshot.data!.docs.toList();
+
+        // ✅ Sort chapters by 'order' set in admin panel
+       docs.sort((a, b) {
+  final aData = a.data() as Map<String, dynamic>;
+  final bData = b.data() as Map<String, dynamic>;
+  final ao = (aData['order'] ?? 9999) as int;
+  final bo = (bData['order'] ?? 9999) as int;
+  return ao.compareTo(bo);
+});
+
+
+        if (docs.isEmpty) return const Center(child: Text("No chapters"));
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: snapshot.data!.docs.length,
+          itemCount: docs.length,
           itemBuilder: (context, index) {
-            final chapterDoc = snapshot.data!.docs[index];
+            final chapterDoc = docs[index];
             final data = chapterDoc.data() as Map<String, dynamic>;
             final chapterName = data['name'] ?? 'Chapter';
 

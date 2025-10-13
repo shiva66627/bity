@@ -122,6 +122,7 @@ class _NotesPageState extends State<NotesPage> {
     );
   }
 
+  // ✅ Fixed function names (no typo)
   Widget _buildContent() {
     if (selectedYear == null) return _buildYearSelection();
     if (selectedSubjectId == null) return _buildSubjectList();
@@ -176,6 +177,8 @@ class _NotesPageState extends State<NotesPage> {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 20),
+
+          // 🟦 Year Grid
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -223,7 +226,7 @@ class _NotesPageState extends State<NotesPage> {
           const Divider(thickness: 1),
           const SizedBox(height: 10),
 
-          // 🌟 Bullet Points Section
+          // 🌟 Salient Features Section
           const Text(
             "⭐ Salient Features of MBBS Freaks Notes",
             style: TextStyle(
@@ -244,13 +247,13 @@ class _NotesPageState extends State<NotesPage> {
             child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _BulletPoint(text: "📝 Colorful handwritten notes"),
-                _BulletPoint(
-                    text: "📌 Concise and focused on exam-relevant points"),
-                _BulletPoint(text: "📚 Covers PYQs extensively"),
-                _BulletPoint(text: "🧠 Concept explanation with flowcharts & diagrams"),
-                _BulletPoint(text: "🔖 Standard textbook references"),
-                _BulletPoint(text: "⚡ Easy navigation year → subject → chapter → PDF"),
+                _BulletPoint(text: "Colorful handwritten notes"),
+                _BulletPoint(text: "Concise and Focused on Exam-Relevant Points"),
+                _BulletPoint(text: "Short and Crisp"),
+                _BulletPoint(text: "Well Organized"),
+                _BulletPoint(text: "Covers vast number of Previous year questions"),
+                _BulletPoint(text: "Concept explanation with realistic diagrams, flowcharts and cycles"),
+                _BulletPoint(text: "Standard Textbook References"),
               ],
             ),
           ),
@@ -283,17 +286,53 @@ class _NotesPageState extends State<NotesPage> {
             final subjectDoc = docs[index];
             final data = subjectDoc.data() as Map<String, dynamic>;
             final subjectName = data['name'] ?? 'Subject';
+            final imageUrl = data['imageUrl'] ?? '';
 
-            return Card(
-              child: ListTile(
-                title: Text(subjectName),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () {
-                  setState(() {
-                    selectedSubjectId = subjectDoc.id;
-                    selectedSubjectName = subjectName;
-                  });
-                },
+            return GestureDetector(
+              onTap: () {
+                setState(() {
+                  selectedSubjectId = subjectDoc.id;
+                  selectedSubjectName = subjectName;
+                });
+              },
+              child: Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 4,
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: imageUrl.isNotEmpty
+                          ? Image.network(
+                              imageUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, _, __) =>
+                                  Container(color: Colors.grey.shade300),
+                            )
+                          : Container(color: Colors.grey.shade300),
+                    ),
+                    Container(
+                      width: double.infinity,
+                      color: Colors.blue,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 12),
+                      child: Text(
+                        subjectName,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -314,10 +353,19 @@ class _NotesPageState extends State<NotesPage> {
           return const Center(child: CircularProgressIndicator());
         }
         if (snap.hasError) return Center(child: Text("Error: ${snap.error}"));
-        final docs = snap.data?.docs ?? [];
+        final docs = snap.data?.docs.toList() ?? [];
         if (docs.isEmpty) {
           return const Center(child: Text("No chapters found for this subject."));
         }
+
+        // ✅ Fixed sorting block to avoid crash
+        docs.sort((a, b) {
+          final aData = a.data() as Map<String, dynamic>;
+          final bData = b.data() as Map<String, dynamic>;
+          final ao = (aData['order'] ?? 9999) as int;
+          final bo = (bData['order'] ?? 9999) as int;
+          return ao.compareTo(bo);
+        });
 
         return ListView.builder(
           itemCount: docs.length,
@@ -545,7 +593,7 @@ class _BulletPoint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -554,8 +602,7 @@ class _BulletPoint extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(
-                  fontSize: 14, height: 1.4, color: Colors.black87),
+              style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
             ),
           ),
         ],

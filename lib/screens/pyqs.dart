@@ -170,7 +170,6 @@ class _PyqsPageState extends State<PyqsPage> {
           const SizedBox(height: 20),
           const Divider(thickness: 1),
           const SizedBox(height: 10),
-
           const Text(
             "⭐ Salient Features of MBBS Freaks Practice Papers",
             style: TextStyle(
@@ -192,20 +191,12 @@ class _PyqsPageState extends State<PyqsPage> {
                     text:
                         "👉 Similar to real university question paper pattern"),
                 _BulletPoint(
-                    text:
-                        "👉 College wise papers categorization"),
+                    text: "👉 College wise papers categorization"),
+                _BulletPoint(text: "👉 Helps student to practice MCQs"),
                 _BulletPoint(
-                    text:
-                        "👉 Helps student to practice MCQs"),
-                _BulletPoint(
-                    text:
-                        "👉 Helps student to encounter variety of questions"),
-                _BulletPoint(
-                    text:
-                        "👉 Boosts exam confidence"),
-                _BulletPoint(
-                    text:
-                        "👉 Free access to everyone"),
+                    text: "👉 Helps student to encounter variety of questions"),
+                _BulletPoint(text: "👉 Boosts exam confidence"),
+                _BulletPoint(text: "👉 Free access to everyone"),
               ],
             ),
           ),
@@ -288,7 +279,7 @@ class _PyqsPageState extends State<PyqsPage> {
     );
   }
 
-  // =================== CHAPTERS ===================
+  // =================== CHAPTERS (locally sorted by "order") ===================
   Widget _buildChapterList() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -297,7 +288,18 @@ class _PyqsPageState extends State<PyqsPage> {
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        final docs = snapshot.data!.docs;
+        var docs = snapshot.data!.docs.toList();
+
+        // ✅ Sort locally by "order" (set from admin drag)
+     docs.sort((a, b) {
+  final aData = a.data() as Map<String, dynamic>;
+  final bData = b.data() as Map<String, dynamic>;
+  final ao = (aData['order'] ?? 9999) as int;
+  final bo = (bData['order'] ?? 9999) as int;
+  return ao.compareTo(bo);
+});
+
+
         if (docs.isEmpty) return const Center(child: Text("No chapters"));
 
         return ListView.builder(
@@ -460,7 +462,7 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
   }
 }
 
-// =================== BULLET POINT WIDGET ===================
+// =================== BULLET POINT ===================
 class _BulletPoint extends StatelessWidget {
   final String text;
   const _BulletPoint({required this.text});

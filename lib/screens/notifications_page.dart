@@ -16,13 +16,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
   bool _isAdmin = false;
   bool _loading = true;
 
-  // ✅ Removed _checkAdminStatus() from initState
   @override
   void initState() {
     super.initState();
   }
 
-  // ✅ Use didChangeDependencies so it refreshes each time the page is shown
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -43,7 +41,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
         userDoc.exists && userDoc.data()?['role'] == 'admin';
 
     setState(() {
-      // 🚀 If admin but switched to user mode => treat as user
       _isAdmin = isActuallyAdmin && !ViewMode.isUserMode;
       _loading = false;
     });
@@ -133,8 +130,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon:
-                                  const Icon(Icons.edit, color: Colors.blue),
+                              icon: const Icon(Icons.edit, color: Colors.blue),
                               onPressed: () => _editNotification(doc.id, data),
                             ),
                             IconButton(
@@ -150,10 +146,91 @@ class _NotificationsPageState extends State<NotificationsPage> {
           );
         },
       ),
+
+      /// ✅ FAB only for Admins
+      floatingActionButton: _isAdmin
+          ? FloatingActionButton(
+              backgroundColor: Colors.red,
+              onPressed: _showAddNotificationDialog,
+              child: const Icon(Icons.add, color: Colors.white),
+            )
+          : null,
+
       backgroundColor: const Color(0xFFF5F5F5),
     );
   }
 
+  /// =================== ADD NOTIFICATION ===================
+  void _showAddNotificationDialog() {
+    final titleController = TextEditingController();
+    final messageController = TextEditingController();
+    final imageUrlController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Add Notification"),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(labelText: "Title"),
+              ),
+              TextField(
+                controller: messageController,
+                decoration: const InputDecoration(labelText: "Message"),
+                maxLines: 3,
+              ),
+              TextField(
+                controller: imageUrlController,
+                decoration: const InputDecoration(
+                    labelText: "Image URL (optional)"),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final title = titleController.text.trim();
+              final message = messageController.text.trim();
+              final imageUrl = imageUrlController.text.trim();
+
+              if (title.isEmpty || message.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("⚠️ Title & Message required")),
+                );
+                return;
+              }
+
+              await FirebaseFirestore.instance
+                  .collection('notifications')
+                  .add({
+                'title': title,
+                'message': message,
+                'imageUrl': imageUrl.isNotEmpty ? imageUrl : null,
+                'createdAt': FieldValue.serverTimestamp(),
+              });
+
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("✅ Notification added")),
+              );
+            },
+            child: const Text("Add"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// =================== EDIT ===================
   void _editNotification(String docId, Map<String, dynamic> data) {
     final titleController = TextEditingController(text: data['title']);
     final messageController = TextEditingController(text: data['message']);
@@ -202,6 +279,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
     );
   }
 
+  /// =================== DELETE ===================
   void _deleteNotification(String docId) {
     showDialog(
       context: context,

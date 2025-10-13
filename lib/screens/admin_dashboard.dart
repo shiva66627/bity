@@ -46,9 +46,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
         final doc = await _firestore.collection('users').doc(user.uid).get();
         if (doc.exists && doc['role'].toString().trim() == "admin") {
           setState(() {
-            adminName = (doc.data()?['fullName'] as String?)?.trim().isNotEmpty == true
-                ? doc['fullName']
-                : 'Admin';
+            adminName =
+                (doc.data()?['fullName'] as String?)?.trim().isNotEmpty == true
+                    ? doc['fullName']
+                    : 'Admin';
             adminEmail = (doc.data()?['email'] as String?) ?? user.email ?? '';
             adminPhotoUrl = (doc.data()?['photoUrl'] as String?) ?? '';
             isDarkMode = (doc.data()?['isDarkMode'] as bool?) ?? false;
@@ -78,7 +79,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       Navigator.pushReplacementNamed(context, '/login');
     }
   }
-  
+
   // 🛠️ Fix createdAt for admins (in case missing)
   Future<void> _fixAdminCreatedAt() async {
     final adminsSnapshot = await _firestore
@@ -103,7 +104,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
       );
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -147,16 +147,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
               onTap: _showProfileLinkDialog,
               child: CircleAvatar(
                 backgroundColor: Colors.white,
-                backgroundImage: adminPhotoUrl != null && adminPhotoUrl!.isNotEmpty
-                    ? NetworkImage(adminPhotoUrl!)
-                    : null,
+                backgroundImage:
+                    adminPhotoUrl != null && adminPhotoUrl!.isNotEmpty
+                        ? NetworkImage(adminPhotoUrl!)
+                        : null,
                 child: (adminPhotoUrl == null || adminPhotoUrl!.isEmpty)
                     ? const Icon(Icons.person, color: Colors.red)
                     : null,
               ),
             ),
           ),
-
           ListTile(
             leading: const Icon(Icons.person_add),
             title: const Text("Promote Admin"),
@@ -165,7 +165,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
               _showPromoteDialog();
             },
           ),
-
           ListTile(
             leading: const Icon(Icons.manage_accounts),
             title: const Text("Manage Admins"),
@@ -185,8 +184,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
               _fixAdminCreatedAt();
             },
           ),
-
-
           ListTile(
             leading: const Icon(Icons.bolt, color: Colors.purple),
             title: const Text("Add Daily Question"),
@@ -195,7 +192,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
               _showDailyQuestionDialog();
             },
           ),
-
           ListTile(
             leading: const Icon(Icons.delete, color: Colors.red),
             title: const Text("Delete Daily Question"),
@@ -204,7 +200,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
               _showDeleteDailyQuestionDialog();
             },
           ),
-
           ListTile(
             leading: const Icon(Icons.send, color: Colors.teal),
             title: const Text("Send Notification"),
@@ -213,9 +208,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
               _showNotificationDialog();
             },
           ),
-
           ListTile(
-            leading: const Icon(Icons.notifications_active_outlined, color: Colors.blue),
+            leading: const Icon(Icons.notifications_active_outlined,
+                color: Colors.blue),
             title: const Text("Manage Notifications"),
             onTap: () {
               Navigator.pop(context);
@@ -233,23 +228,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
               );
             },
           ),
-
           ListTile(
             leading: const Icon(Icons.verified_user, color: Colors.indigo),
             title: const Text("Add Premium Users"),
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const AdminPremiumUsersPage()),
+                MaterialPageRoute(
+                    builder: (_) => const AdminPremiumUsersPage()),
               );
             },
           ),
-
           const Divider(),
-
           ListTile(
             leading: const Icon(Icons.switch_account, color: Colors.blue),
-            title: Text(ViewMode.isUserMode ? "Switch to Admin" : "Switch to User"),
+            title: Text(
+                ViewMode.isUserMode ? "Switch to Admin" : "Switch to User"),
             onTap: () {
               setState(() {
                 ViewMode.isUserMode = !ViewMode.isUserMode;
@@ -258,7 +252,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
               if (ViewMode.isUserMode) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("✅ You are now viewing as USER")),
+                  const SnackBar(
+                      content: Text("✅ You are now viewing as USER")),
                 );
                 Navigator.pushReplacementNamed(context, '/home');
               } else {
@@ -269,7 +264,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
               }
             },
           ),
-
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
             title: const Text("Logout"),
@@ -278,7 +272,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
               _logout();
             },
           ),
-
         ],
       ),
     );
@@ -310,43 +303,60 @@ class _AdminDashboardState extends State<AdminDashboard> {
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          Text(adminEmail, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+          Text(adminEmail,
+              style: const TextStyle(color: Colors.grey, fontSize: 16)),
           const SizedBox(height: 24),
-
-          const Text("Quick Actions", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text("Quick Actions",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _buildActionCard("Upload Notes", Icons.upload_file, Colors.blue)),
+              Expanded(
+                  child: _buildActionCard(
+                      "Upload Notes", Icons.upload_file, Colors.blue)),
               const SizedBox(width: 12),
-              Expanded(child: _buildActionCard("Upload PYQs", Icons.upload_file, Colors.green)),
+              Expanded(
+                  child: _buildActionCard(
+                      "Upload PYQs", Icons.upload_file, Colors.green)),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _buildActionCard("Upload Question Bank", Icons.upload_file, Colors.orange)),
+              Expanded(
+                  child: _buildActionCard("Upload Question Bank",
+                      Icons.upload_file, Colors.orange)),
               const SizedBox(width: 12),
-              Expanded(child: _buildActionCard("Upload Quiz", Icons.quiz, Colors.purple)),
+              Expanded(
+                  child: _buildActionCard(
+                      "Upload Quiz", Icons.quiz, Colors.purple)),
             ],
           ),
-
           const SizedBox(height: 24),
-          const Text("Manage Content", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text("Manage Content",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _buildManageCard("Manage Notes", Icons.book, Colors.blue, "notes")),
+              Expanded(
+                  child: _buildManageCard(
+                      "Manage Notes", Icons.book, Colors.blue, "notes")),
               const SizedBox(width: 12),
-              Expanded(child: _buildManageCard("Manage PYQs", Icons.description, Colors.green, "pyqs")),
+              Expanded(
+                  child: _buildManageCard(
+                      "Manage PYQs", Icons.description, Colors.green, "pyqs")),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _buildManageCard("Manage Question Bank", Icons.library_books, Colors.orange, "question_banks")),
+              Expanded(
+                  child: _buildManageCard("Manage Question Bank",
+                      Icons.library_books, Colors.orange, "question_banks")),
               const SizedBox(width: 12),
-              Expanded(child: _buildManageCard("Manage Quiz", Icons.quiz, Colors.purple, "quiz")),
+              Expanded(
+                  child: _buildManageCard(
+                      "Manage Quiz", Icons.quiz, Colors.purple, "quiz")),
             ],
           ),
         ],
@@ -368,7 +378,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
           } else if (title == "Upload Question Bank") {
             _showUploadDialog("question_banks");
           } else if (title == "Upload Quiz") {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminQuizUploader()));
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const AdminQuizUploader()));
           }
         },
         child: Padding(
@@ -380,7 +391,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
             ],
           ),
@@ -389,7 +401,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Widget _buildManageCard(String title, IconData icon, Color color, String category) {
+  Widget _buildManageCard(
+      String title, IconData icon, Color color, String category) {
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -399,7 +412,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => hierarchical.AdminHierarchicalContentManager(category: category),
+              builder: (_) => hierarchical.AdminHierarchicalContentManager(
+                  category: category),
             ),
           );
         },
@@ -412,7 +426,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
             ],
           ),
@@ -433,10 +448,26 @@ class _AdminDashboardState extends State<AdminDashboard> {
     bool isPremium = false; // ✅ NEW
 
     final collectionMap = {
-      "notes": {"subjects": "notesSubjects", "chapters": "notesChapters", "pdfs": "notesPdfs"},
-      "pyqs": {"subjects": "pyqsSubjects", "chapters": "pyqsChapters", "pdfs": "pyqsPdfs"},
-      "question_banks": {"subjects": "qbSubjects", "chapters": "qbChapters", "pdfs": "qbPdfs"},
-      "quiz": {"subjects": "quizSubjects", "chapters": "quizChapters", "pdfs": "quizPdfs"},
+      "notes": {
+        "subjects": "notesSubjects",
+        "chapters": "notesChapters",
+        "pdfs": "notesPdfs"
+      },
+      "pyqs": {
+        "subjects": "pyqsSubjects",
+        "chapters": "pyqsChapters",
+        "pdfs": "pyqsPdfs"
+      },
+      "question_banks": {
+        "subjects": "qbSubjects",
+        "chapters": "qbChapters",
+        "pdfs": "qbPdfs"
+      },
+      "quiz": {
+        "subjects": "quizSubjects",
+        "chapters": "quizChapters",
+        "pdfs": "quizPdfs"
+      },
     };
 
     final collections = collectionMap[category]!;
@@ -446,7 +477,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
       builder: (_) => StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: Text("Upload ${category.toUpperCase()}"),
             content: SingleChildScrollView(
               child: Column(
@@ -456,16 +488,21 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     value: selectedYear,
                     decoration: const InputDecoration(labelText: "Select Year"),
                     items: const [
-                      DropdownMenuItem(value: "1st Year", child: Text("1st Year")),
-                      DropdownMenuItem(value: "2nd Year", child: Text("2nd Year")),
-                      DropdownMenuItem(value: "3rd Year", child: Text("3rd Year")),
-                      DropdownMenuItem(value: "4th Year", child: Text("4th Year")),
+                      DropdownMenuItem(
+                          value: "1st Year", child: Text("1st Year")),
+                      DropdownMenuItem(
+                          value: "2nd Year", child: Text("2nd Year")),
+                      DropdownMenuItem(
+                          value: "3rd Year", child: Text("3rd Year")),
+                      DropdownMenuItem(
+                          value: "4th Year", child: Text("4th Year")),
                     ],
                     onChanged: (val) => setState(() => selectedYear = val!),
                   ),
                   TextField(
                     controller: subjectController,
-                    decoration: const InputDecoration(labelText: "Subject Name"),
+                    decoration:
+                        const InputDecoration(labelText: "Subject Name"),
                   ),
                   const SizedBox(height: 8),
 
@@ -474,11 +511,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       icon: const Icon(Icons.image),
                       label: const Text("Upload Subject Image"),
                       onPressed: () async {
-                        final url = await StorageService().uploadFile("subject_images");
+                        final url =
+                            await StorageService().uploadFile("subject_images");
                         if (url != null) {
                           setState(() => subjectImageUrl = url);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("📎 Subject image added")),
+                            const SnackBar(
+                                content: Text("📎 Subject image added")),
                           );
                         }
                       },
@@ -486,7 +525,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   else
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: Image.network(subjectImageUrl!, width: 40, height: 40, fit: BoxFit.cover),
+                      leading: Image.network(subjectImageUrl!,
+                          width: 40, height: 40, fit: BoxFit.cover),
                       title: const Text("Subject image added"),
                       trailing: IconButton(
                         icon: const Icon(Icons.close, color: Colors.red),
@@ -496,7 +536,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
                   TextField(
                     controller: chapterController,
-                    decoration: const InputDecoration(labelText: "Chapter Name"),
+                    decoration:
+                        const InputDecoration(labelText: "Chapter Name"),
                   ),
                   TextField(
                     controller: titleController,
@@ -521,7 +562,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   else
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
+                      leading:
+                          const Icon(Icons.picture_as_pdf, color: Colors.red),
                       title: const Text("PDF added"),
                       trailing: IconButton(
                         icon: const Icon(Icons.close, color: Colors.red),
@@ -532,7 +574,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   // ✅ NEW: Premium toggle
                   SwitchListTile(
                     title: const Text("Mark as Premium"),
-                    subtitle: const Text("Premium PDFs will be locked for free users"),
+                    subtitle: const Text(
+                        "Premium PDFs will be locked for free users"),
                     value: isPremium,
                     onChanged: (val) {
                       setState(() => isPremium = val);
@@ -553,7 +596,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       titleController.text.isEmpty ||
                       pdfUrl == null) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("⚠️ Please fill all fields")),
+                      const SnackBar(
+                          content: Text("⚠️ Please fill all fields")),
                     );
                     return;
                   }
@@ -574,7 +618,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
                     if (existingQuery.docs.isNotEmpty) {
                       subjectId = existingQuery.docs.first.id;
-                      finalImageUrl = existingQuery.docs.first.data()['imageUrl'];
+                      finalImageUrl =
+                          existingQuery.docs.first.data()['imageUrl'];
                     } else {
                       final newSubjectDoc = await FirebaseFirestore.instance
                           .collection(collections["subjects"]!)
@@ -609,7 +654,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("✅ Content uploaded successfully"), backgroundColor: Colors.green),
+                      const SnackBar(
+                          content: Text("✅ Content uploaded successfully"),
+                          backgroundColor: Colors.green),
                     );
                   } catch (e) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -626,7 +673,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-
   // ========================= Daily Question: Add =========================
 
   void _showDailyQuestionDialog() {
@@ -642,7 +688,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
       builder: (_) => StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: const Text("Add Daily Question"),
             content: SingleChildScrollView(
               child: Column(
@@ -661,7 +708,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     value: correctOption,
-                    decoration: const InputDecoration(labelText: "Correct Answer"),
+                    decoration:
+                        const InputDecoration(labelText: "Correct Answer"),
                     items: const [
                       DropdownMenuItem(value: "A", child: Text("Option A")),
                       DropdownMenuItem(value: "B", child: Text("Option B")),
@@ -678,7 +726,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       icon: const Icon(Icons.image),
                       label: const Text("Attach Image (Optional)"),
                       onPressed: () async {
-                        final url = await StorageService().uploadFile("daily_questions");
+                        final url = await StorageService()
+                            .uploadFile("daily_questions");
                         if (url != null) {
                           setState(() => imageUrl = url);
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -690,7 +739,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   else
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: Image.network(imageUrl!, width: 40, height: 40, fit: BoxFit.cover),
+                      leading: Image.network(imageUrl!,
+                          width: 40, height: 40, fit: BoxFit.cover),
                       title: const Text("Image attached"),
                       trailing: IconButton(
                         icon: const Icon(Icons.close, color: Colors.red),
@@ -702,14 +752,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
                   TextField(
                     controller: explanationController,
-                    decoration: const InputDecoration(labelText: "Explanation (Optional)"),
+                    decoration: const InputDecoration(
+                        labelText: "Explanation (Optional)"),
                     maxLines: 3,
                   ),
                   const SizedBox(height: 10),
 
                   TextField(
                     controller: messageController,
-                    decoration: const InputDecoration(labelText: "Message (Optional)"),
+                    decoration:
+                        const InputDecoration(labelText: "Message (Optional)"),
                     maxLines: 2,
                   ),
                 ],
@@ -730,10 +782,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     return;
                   }
 
-                  final options = optionControllers.map((c) => c.text.trim()).toList();
-                  final answerMap = {"A": options[0], "B": options[1], "C": options[2], "D": options[3]};
+                  final options =
+                      optionControllers.map((c) => c.text.trim()).toList();
+                  final answerMap = {
+                    "A": options[0],
+                    "B": options[1],
+                    "C": options[2],
+                    "D": options[3]
+                  };
 
-                  await FirebaseFirestore.instance.collection("daily_question").add({
+                  await FirebaseFirestore.instance
+                      .collection("daily_question")
+                      .add({
                     "question": questionController.text.trim(),
                     "options": options,
                     "correctAnswer": answerMap[correctOption],
@@ -749,7 +809,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("✅ Daily Question Added with details!"), backgroundColor: Colors.green),
+                    const SnackBar(
+                        content: Text("✅ Daily Question Added with details!"),
+                        backgroundColor: Colors.green),
                   );
                 },
                 child: const Text("Save"),
@@ -771,13 +833,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     if (snapshot.docs.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("⚡ No Daily Questions found to delete"), backgroundColor: Colors.orange),
+        const SnackBar(
+            content: Text("⚡ No Daily Questions found to delete"),
+            backgroundColor: Colors.orange),
       );
       return;
     }
 
     final doc = snapshot.docs.first;
-    final questionText = (doc.data()['question'] as String?) ?? "No question text";
+    final questionText =
+        (doc.data()['question'] as String?) ?? "No question text";
 
     showDialog(
       context: context,
@@ -806,11 +871,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("🗑️ Daily Question deleted successfully"), backgroundColor: Colors.green),
+                  const SnackBar(
+                      content: Text("🗑️ Daily Question deleted successfully"),
+                      backgroundColor: Colors.green),
                 );
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("❌ Error deleting question: $e"), backgroundColor: Colors.red),
+                  SnackBar(
+                      content: Text("❌ Error deleting question: $e"),
+                      backgroundColor: Colors.red),
                 );
               }
             },
@@ -823,30 +892,88 @@ class _AdminDashboardState extends State<AdminDashboard> {
   // ========================= Profile Link Dialog (Missing implementation) =========================
   void _showProfileLinkDialog() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("⚠️ Profile link action not yet implemented.")),
+      const SnackBar(
+          content: Text("⚠️ Profile link action not yet implemented.")),
     );
   }
 
   // ========================= Promote Admin Dialog (Missing implementation) =========================
   void _showPromoteDialog() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("⚠️ Promote Admin action not yet implemented.")),
+    final emailController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Promote to Admin"),
+        content: TextField(
+          controller: emailController,
+          decoration: const InputDecoration(labelText: "User Email"),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final email = emailController.text.trim();
+              if (email.isEmpty) return;
+
+              try {
+                final snapshot = await FirebaseFirestore.instance
+                    .collection('users')
+                    .where('email', isEqualTo: email)
+                    .limit(1)
+                    .get();
+
+                if (snapshot.docs.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text("❌ No user found with this email")),
+                  );
+                  return;
+                }
+
+                final userDocId = snapshot.docs.first.id;
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(userDocId)
+                    .update({'role': 'admin'});
+
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                      content: Text("✅ $email promoted to Admin"),
+                      backgroundColor: Colors.green),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Error: $e")),
+                );
+              }
+            },
+            child: const Text("Promote"),
+          ),
+        ],
+      ),
     );
   }
 
   // 🚨 CORRECTED & COMPLETED: Notification Dialog with Cloud Functions Call 🚨
+
   void _showNotificationDialog() {
     final titleController = TextEditingController();
     final messageController = TextEditingController();
     String? imageUrl;
-    bool isSending = false; // Add state to handle loading
+    bool isSending = false;
 
     showDialog(
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: const Text("Send Notification"),
             content: SingleChildScrollView(
               child: Column(
@@ -863,7 +990,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Image Upload Button/Preview
+                  // Image Upload
                   if (imageUrl == null)
                     ElevatedButton.icon(
                       icon: const Icon(Icons.image),
@@ -871,11 +998,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       onPressed: isSending
                           ? null
                           : () async {
-                              final url = await StorageService().uploadFile("notification_images");
+                              final url = await StorageService()
+                                  .uploadFile("notifications");
                               if (url != null) {
                                 setState(() => imageUrl = url);
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text("📎 Image attached")),
+                                  const SnackBar(
+                                      content: Text("📎 Image attached")),
                                 );
                               }
                             },
@@ -883,7 +1012,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   else
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: Image.network(imageUrl!, width: 40, height: 40, fit: BoxFit.cover),
+                      leading: Image.network(imageUrl!,
+                          width: 40, height: 40, fit: BoxFit.cover),
                       title: const Text("Image attached"),
                       trailing: IconButton(
                         icon: const Icon(Icons.close, color: Colors.red),
@@ -903,11 +1033,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ? null
                     : () async {
                         final title = titleController.text.trim();
-                        final body = messageController.text.trim();
+                        final message = messageController.text.trim();
 
-                        if (title.isEmpty || body.isEmpty) {
+                        if (title.isEmpty || message.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("⚠️ Title and Message are required")),
+                            const SnackBar(
+                                content:
+                                    Text("⚠️ Title and Message are required")),
                           );
                           return;
                         }
@@ -915,59 +1047,44 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         setState(() => isSending = true);
 
                         try {
-                          // 🚀 FIX: Set region to 'us-central1' as confirmed by your Firebase dashboard 
-                          final callable = FirebaseFunctions.instanceFor(region: 'us-central1')
-                              .httpsCallable('broadcastNotification');
-
-                          await callable.call(<String, dynamic>{
-                            'title': title,
-                            'body': body,
-                            'imageUrl': imageUrl,
+                          await FirebaseFirestore.instance
+                              .collection("notifications")
+                              .add({
+                            "title": title,
+                            "message": message,
+                            "imageUrl": imageUrl,
+                            "createdAt": FieldValue.serverTimestamp(),
                           });
 
                           if (mounted) {
-                            Navigator.pop(context); // Close dialog
+                            Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text("✅ Notification sent successfully!"),
+                                content:
+                                    Text("✅ Notification sent successfully"),
                                 backgroundColor: Colors.green,
                               ),
                             );
                           }
-                        } on FirebaseFunctionsException catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                // Show the error code and message
-                                content: Text("❌ Error: [${e.code}] ${e.message ?? 'Unknown error'}"),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
                         } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text("❌ An unexpected error occurred: $e"),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                                content: Text("❌ Error: $e"),
+                                backgroundColor: Colors.red),
+                          );
                         } finally {
-                          if (mounted) {
-                            setState(() => isSending = false);
-                          }
+                          if (mounted) setState(() => isSending = false);
                         }
                       },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: isSending ? Colors.grey : Colors.red[600],
-                  foregroundColor: Colors.white,
-                ),
+                    backgroundColor: Colors.red[600],
+                    foregroundColor: Colors.white),
                 child: isSending
                     ? const SizedBox(
                         height: 20,
                         width: 20,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 3),
                       )
                     : const Text("Send"),
               ),
