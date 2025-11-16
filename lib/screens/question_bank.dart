@@ -380,17 +380,38 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
     _loadPdf();
   }
 
-  Future<void> _loadPdf() async {
+ Future<void> _loadPdf() async {
+  try {
     final dir = await getApplicationDocumentsDirectory();
-    final safeFileName = '${widget.tag}_${widget.url.hashCode}.pdf';
-    final file = File("${dir.path}/$safeFileName");
+
+    // Unique hashed filename for safe storage
+    final fileName = "${widget.tag}_${widget.url.hashCode}.pdf";
+    final file = File("${dir.path}/$fileName");
 
     PdfDocument doc;
+
+    // 🟢 Load from offline if already downloaded
     if (await file.exists()) {
       doc = await PdfDocument.openFile(file.path);
     } else {
+      // 🟡 First-time download
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("⏳ Downloading PDF...")),
+      );
+
       final response = await http.get(Uri.parse(widget.url));
+
+      if (response.statusCode != 200) {
+        throw Exception("Failed to download PDF");
+      }
+
+      // Save PDF locally
       await file.writeAsBytes(response.bodyBytes, flush: true);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("✅ PDF saved for offline use")),
+      );
+
       doc = await PdfDocument.openFile(file.path);
     }
 
@@ -398,7 +419,15 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
       _totalPages = doc.pagesCount;
       _pdfController = PdfControllerPinch(document: Future.value(doc));
     });
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ Failed to load PDF: $e")),
+      );
+    }
   }
+}
+
 
   @override
   void dispose() {

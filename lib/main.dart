@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
+import 'dart:io' show Platform;
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:no_screenshot/no_screenshot.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
@@ -23,9 +28,9 @@ import 'screens/notifications_page.dart';
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
-/// 🧠 Show local notification in system tray
+/// 🔔 Local notification display
 Future<void> _showLocalNotification(RemoteMessage message) async {
-  const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+  const androidDetails = AndroidNotificationDetails(
     'mbbsfreaks_channel',
     'MBBS Freaks Notifications',
     importance: Importance.max,
@@ -33,92 +38,114 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
     ticker: 'ticker',
   );
 
-  const NotificationDetails notificationDetails = NotificationDetails(
-    android: androidDetails,
-  );
+  const details = NotificationDetails(android: androidDetails);
 
   await flutterLocalNotificationsPlugin.show(
     message.notification.hashCode,
     message.notification?.title ?? 'MBBS Freaks',
     message.notification?.body ?? '',
-    notificationDetails,
+    details,
   );
 }
 
-/// 🔔 Handle background messages (no UI)
+/// 🔔 Background FCM handler
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   await _showLocalNotification(message);
 }
 
+/// ⭐ SAVE DEVICE TOKEN
+Future<void> saveDeviceToken() async {
+  final token = await FirebaseMessaging.instance.getToken();
+  if (token == null) return;
+
+  await FirebaseFirestore.instance
+      .collection('device_tokens')
+      .doc(token)
+      .set({
+    'token': token,
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+}
+
+/// 🌟 FAST APP START
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ Initialize Firebase
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // ✅ Enable Firebase App Check
-  await FirebaseAppCheck.instance.activate(
-    androidProvider: AndroidProvider.playIntegrity,
-    appleProvider: AppleProvider.debug,
+  // Firebase first
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // ✅ Disable screenshots globally
-  await NoScreenshot.instance.screenshotOff();
-
-  // ✅ Initialize local notifications
-  const AndroidInitializationSettings androidInitSettings =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
-  const InitializationSettings initSettings =
-      InitializationSettings(android: androidInitSettings);
-  await flutterLocalNotificationsPlugin.initialize(initSettings);
-
-  // ✅ Handle background notifications
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-  // ✅ Request notification permission
-  await FirebaseMessaging.instance.requestPermission(
-    alert: true,
-    badge: true,
-    sound: true,
-  );
-
-  // ✅ Subscribe to 'all' topic for broadcast notifications
-  await FirebaseMessaging.instance.subscribeToTopic('all');
-  print("✅ Subscribed to 'all' topic for notifications");
-
-  // ✅ Foreground message listener
-  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    _showLocalNotification(message);
-  });
-
-  // ✅ Handle notification tap when app is in background
-  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-    print("🟡 Notification opened: ${message.data}");
-    // Navigate to Notifications Page
-    navigatorKey.currentState?.pushNamed('/notifications');
-  });
-
-  // ✅ Handle notification tap when app is terminated
-  RemoteMessage? initialMessage =
-      await FirebaseMessaging.instance.getInitialMessage();
-  if (initialMessage != null) {
-    print("🚀 App opened from notification: ${initialMessage.data}");
-    // Delay navigation to allow MaterialApp to build
-    Future.delayed(const Duration(milliseconds: 500), () {
-      navigatorKey.currentState?.pushNamed('/notifications');
-    });
-  }
-
-  // ✅ Optional: print FCM token for testing
-  String? token = await FirebaseMessaging.instance.getToken();
-  print("🔥 FCM Token: $token");
-
+  // Show UI immediately
   runApp(const EducationalApp(startScreen: SplashScreen()));
+
+  // Background heavy initialization
+  Future.delayed(Duration.zero, () async {
+    await _initializeBackgroundServices();
+  });
 }
 
-/// 🌐 Global navigator key to handle navigation outside of context
+/// ⭐ ALL heavy initialization
+Future<void> _initializeBackgroundServices() async {
+  // Hive (offline)
+  await Hive.initFlutter();
+  await Hive.openBox('notesBox');
+
+  // Only mobile
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    // ⭐ FIXED: App Check (debug for dev, playIntegrity for release)
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: kReleaseMode
+          ? AndroidProvider.playIntegrity
+          : AndroidProvider.debug,
+      appleProvider: AppleProvider.debug,
+    );
+
+    // Screenshot Lock
+    await NoScreenshot.instance.screenshotOff();
+
+    // Local Notification Init
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidInit);
+    await flutterLocalNotificationsPlugin.initialize(initSettings);
+
+    // Background FCM
+    FirebaseMessaging.onBackgroundMessage(
+      _firebaseMessagingBackgroundHandler,
+    );
+
+    // Notification Permission
+    await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // ⭐ Save token to Firestore
+    saveDeviceToken();
+
+    // ⭐ Foreground notifications
+    FirebaseMessaging.onMessage.listen((message) {
+      if (message.notification != null) {
+        _showLocalNotification(message);
+      }
+    });
+
+    // ⭐ Subscribe everyone to "all"
+    FirebaseMessaging.instance.subscribeToTopic('all');
+
+    // Optional Log token
+    FirebaseMessaging.instance.getToken().then((token) {
+      print("🔥 FCM Token: $token");
+    });
+  }
+}
+
+/// Navigator key (if needed)
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 class EducationalApp extends StatefulWidget {
@@ -136,15 +163,13 @@ class _EducationalAppState extends State<EducationalApp> {
   ThemeMode _themeMode = ThemeMode.light;
 
   void changeTheme(ThemeMode mode) {
-    setState(() {
-      _themeMode = mode;
-    });
+    setState(() => _themeMode = mode);
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      navigatorKey: navigatorKey, // ✅ Added for navigation on tap
+      navigatorKey: navigatorKey,
       title: 'MBBS Freaks',
       theme: ThemeData.light(useMaterial3: true),
       darkTheme: ThemeData.dark(useMaterial3: true),

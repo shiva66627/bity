@@ -12,12 +12,15 @@
         "lib/firebase_options.dart": {
           "projectId": "mbbsfreaks-90b4f",
           "configurations": {
-            "android": "1:566827566356:android:1ac6cc4d2e363de064ae01",
-            "ios": "1:566827566356:ios:7d702d2cbd679e3e64ae01"
+            "web": "1:566827566356:web:87e50cb4bb2aaf3064ae01"
           }
         }
       }
     }
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
   },
   "functions": [
     {
@@ -31,5 +34,19 @@
         "*.local"
       ]
     }
-  ]
+  ],
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
 }

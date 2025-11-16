@@ -27,24 +27,34 @@ class _NotificationsPageState extends State<NotificationsPage> {
     _checkAdminStatus();
   }
 
-  Future<void> _checkAdminStatus() async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      setState(() => _loading = false);
-      return;
-    }
-
-    final userDoc =
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-
-    final isActuallyAdmin =
-        userDoc.exists && userDoc.data()?['role'] == 'admin';
-
-    setState(() {
-      _isAdmin = isActuallyAdmin && !ViewMode.isUserMode;
-      _loading = false;
-    });
+ Future<void> _checkAdminStatus() async {
+  final user = _auth.currentUser;
+  if (user == null) {
+    setState(() => _loading = false);
+    return;
   }
+
+  final userDoc = await FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid)
+      .get();
+
+  if (!userDoc.exists) {
+    setState(() => _loading = false);
+    return;
+  }
+
+  final role = userDoc.data()?['role'] ?? 'user';
+
+  // allow ALL admin types
+  final isAdminRole = role == 'admin' || role == 'power_admin' || role == 'super_admin';
+
+  setState(() {
+    _isAdmin = isAdminRole && !ViewMode.isUserMode;
+    _loading = false;
+  });
+}
+
 
   String _formatTimestamp(Timestamp? timestamp) {
     if (timestamp == null) return '';

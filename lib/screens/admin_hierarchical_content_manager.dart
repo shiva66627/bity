@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/storage_service.dart'; // Firebase Storage helper
+import 'package:mbbsfreaks/screens/admin_quiz_uploader.dart';
+
 
 class AdminHierarchicalContentManager extends StatefulWidget {
   final String category; // "notes", "pyqs", "question_banks", "quiz"
@@ -311,58 +313,109 @@ class _AdminHierarchicalContentManagerState
   }
 
   // ================== CHAPTER TILE ==================
-  Widget _buildChapterTile(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    final chapterName = (data["name"] ?? "Chapter").toString();
-    final isPremium = data["isPremium"] == true;
-    final order = (data["order"] is num) ? data["order"] as num : null;
+ Widget _buildChapterTile(DocumentSnapshot doc) {
+  final data = doc.data() as Map<String, dynamic>;
+  final chapterName = (data["name"] ?? "Chapter").toString();
+  final isPremium = data["isPremium"] == true;
+  final order = (data["order"] is num) ? data["order"] as num : null;
 
-    return Card(
-      key: ValueKey(doc.id),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: ListTile(
-        leading: const Icon(Icons.drag_handle),
-        title: Text(
-          order == null ? chapterName : "$order. $chapterName",
-        ),
-        subtitle: Text(
-          isPremium ? "Premium Content" : "Free Access",
-          style: TextStyle(
-            color: isPremium ? Colors.red : Colors.green,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Switch(
-              value: isPremium,
-              onChanged: (val) {
-                FirebaseFirestore.instance
-                    .collection(chaptersCollection)
-                    .doc(doc.id)
-                    .update({"isPremium": val});
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.edit, color: Colors.blue),
-              onPressed: () =>
-                  _editChapter(doc.id, chapterName, order?.toInt() ?? 0),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => doc.reference.delete(),
-            ),
-          ],
-        ),
-        onTap: () {
-          setState(() {
-            selectedChapterId = doc.id;
-          });
-        },
+  return Card(
+    key: ValueKey(doc.id),
+    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+    child: ListTile(
+      leading: const Icon(Icons.drag_handle),
+      title: Text(
+        order == null ? chapterName : "$order. $chapterName",
       ),
-    );
-  }
+      subtitle: Text(
+        isPremium ? "Premium Content" : "Free Access",
+        style: TextStyle(
+          color: isPremium ? Colors.red : Colors.green,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // PREMIUM SWITCH
+          Switch(
+            value: isPremium,
+            onChanged: (val) {
+              FirebaseFirestore.instance
+                  .collection(chaptersCollection)
+                  .doc(doc.id)
+                  .update({"isPremium": val});
+            },
+          ),
+
+          // ⭐ EDIT BUTTON (QUIZ + NORMAL CONTENT) ⭐
+          IconButton(
+            icon: const Icon(Icons.edit, color: Colors.blue),
+            onPressed: () async {
+              // 👉 QUIZ MODE: OPEN QUIZ EDITOR
+              if (widget.category == "quiz") {
+                // 1️⃣ find quiz linked to this chapter
+                final snap = await FirebaseFirestore.instance
+                    .collection("quizPdfs")
+                    .where("chapterId", isEqualTo: doc.id)
+                    .limit(1)
+                    .get();
+
+                String quizId;
+
+                if (snap.docs.isEmpty) {
+                  // 2️⃣ create quiz if missing
+                  final newQuiz = await FirebaseFirestore.instance
+                      .collection("quizPdfs")
+                      .add({
+                    "chapterId": doc.id,
+                    "title": "$chapterName Quiz",
+                    "questions": [],
+                    "createdAt": FieldValue.serverTimestamp(),
+                  });
+
+                  quizId = newQuiz.id;
+                } else {
+                  quizId = snap.docs.first.id;
+                }
+
+                // 3️⃣ open quiz uploader in edit mode
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AdminQuizUploader(
+                      existingQuizId: quizId,
+                      existingChapterId: doc.id,
+                      existingChapterName: chapterName,
+                    ),
+                  ),
+                );
+              } 
+              
+              // 👉 NORMAL MODULES KEEP OLD EDIT BEHAVIOR
+              else {
+                _editChapter(doc.id, chapterName, order?.toInt() ?? 0);
+              }
+            },
+          ),
+
+          // DELETE BUTTON
+          IconButton(
+            icon: const Icon(Icons.delete, color: Colors.red),
+            onPressed: () => doc.reference.delete(),
+          ),
+        ],
+      ),
+
+      // TAP TO LOAD PDFs LIST
+      onTap: () {
+        setState(() {
+          selectedChapterId = doc.id;
+        });
+      },
+    ),
+  );
+}
 
   // ================== ADD SUBJECT (with first chapter + PDF) ==================
   Future<void> _addSubjectDialog() async {

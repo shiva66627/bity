@@ -5,7 +5,9 @@ import 'package:mbbsfreaks/view_mode.dart';
 import 'package:mbbsfreaks/screens/add_schedule_page.dart';
 import 'package:mbbsfreaks/screens/admin_premium_users_page.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-
+import 'add_team_page.dart';
+import 'set_premiums_page.dart';
+import 'package:mbbsfreaks/screens/admin_payment_history_page.dart';
 import 'admin_hierarchical_content_manager.dart' as hierarchical;
 import 'manage_admins_page.dart';
 import 'admin_quiz_uploader.dart';
@@ -30,8 +32,26 @@ class _AdminDashboardState extends State<AdminDashboard> {
   String? adminPhotoUrl;
   bool isLoading = true;
 
+  /// Role: user / admin / power_admin / super_admin
+  String adminRole = 'user';
+
   /// Local-only theme flag; also informs app via [onThemeChanged]
   bool isDarkMode = false;
+
+  // ====== PERMISSIONS FOR CURRENT ADMIN (FROM FIRESTORE) ======
+  bool canUploadContent = true;
+  bool canManageContent = true;
+  bool canSetPremiums = true;
+  bool canViewPayments = true;
+  bool canAddDailyQuestion = true;
+  bool canDeleteDailyQuestion = true;
+  bool canPromoteAdmin = false;
+  bool canAddTeam = true;
+bool canAddPremiumUsers = true; // ⭐ NEW
+
+  bool get isSuperAdmin => adminRole == 'super_admin';
+  bool get isPowerAdmin => adminRole == 'power_admin';
+  bool get isAdminOnly => adminRole == 'admin';
 
   @override
   void initState() {
@@ -44,20 +64,66 @@ class _AdminDashboardState extends State<AdminDashboard> {
       final user = _auth.currentUser;
       if (user != null) {
         final doc = await _firestore.collection('users').doc(user.uid).get();
-        if (doc.exists && doc['role'].toString().trim() == "admin") {
+        if (doc.exists && doc.data() != null) {
+          final data = doc.data()!;
+          final role = (data['role'] as String?)?.trim() ?? 'user';
+
+          // Allow only admin-type roles into this screen
+          if (role != 'admin' &&
+              role != 'power_admin' &&
+              role != 'super_admin') {
+            await _auth.signOut();
+            if (mounted) {
+              Navigator.pushReplacementNamed(context, '/login');
+            }
+            return;
+          }
+
+          // Default permissions based on role
+          final bool defaultAllForThisRole =
+              role == 'super_admin' || role == 'power_admin';
+
           setState(() {
+            adminRole = role;
             adminName =
-                (doc.data()?['fullName'] as String?)?.trim().isNotEmpty == true
-                    ? doc['fullName']
+                (data['fullName'] as String?)?.trim().isNotEmpty == true
+                    ? data['fullName']
                     : 'Admin';
-            adminEmail = (doc.data()?['email'] as String?) ?? user.email ?? '';
-            adminPhotoUrl = (doc.data()?['photoUrl'] as String?) ?? '';
-            isDarkMode = (doc.data()?['isDarkMode'] as bool?) ?? false;
+            adminEmail = (data['email'] as String?) ?? user.email ?? '';
+            adminPhotoUrl = (data['photoUrl'] as String?) ?? '';
+            isDarkMode = (data['isDarkMode'] as bool?) ?? false;
+
+            canUploadContent =
+                (data['perm_uploadContent'] as bool?) ?? defaultAllForThisRole;
+            canManageContent =
+                (data['perm_manageContent'] as bool?) ?? defaultAllForThisRole;
+            canSetPremiums =
+                (data['perm_setPremiums'] as bool?) ?? defaultAllForThisRole;
+            canViewPayments =
+                (data['perm_viewPayments'] as bool?) ?? defaultAllForThisRole;
+            canAddDailyQuestion = (data['perm_addDailyQuestion'] as bool?) ??
+                defaultAllForThisRole;
+            canDeleteDailyQuestion =
+                (data['perm_deleteDailyQuestion'] as bool?) ??
+                    defaultAllForThisRole;
+
+            // By default only super_admins can promote, unless explicitly granted
+            final bool defaultPromote = role == 'super_admin';
+            canPromoteAdmin =
+                (data['perm_promoteAdmin'] as bool?) ?? defaultPromote;
+
+            canAddTeam =
+                (data['perm_addTeam'] as bool?) ?? defaultAllForThisRole;
+                canAddPremiumUsers =
+    (data['perm_addPremiumUsers'] as bool?) ?? defaultAllForThisRole;
+
+
             isLoading = false;
           });
 
           widget.onThemeChanged?.call(isDarkMode);
         } else {
+          // Not an admin user; log out
           await _auth.signOut();
           if (mounted) {
             Navigator.pushReplacementNamed(context, '/login');
@@ -84,7 +150,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Future<void> _fixAdminCreatedAt() async {
     final adminsSnapshot = await _firestore
         .collection('users')
-        .where('role', isEqualTo: 'admin')
+        .where('role', whereIn: ['admin', 'power_admin', 'super_admin'])
         .get();
 
     for (final doc in adminsSnapshot.docs) {
@@ -134,6 +200,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  // ======================================================================
+  // DRAWER
+  // ======================================================================
+
   Widget _buildDrawer() {
     return Drawer(
       child: ListView(
@@ -142,7 +212,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           UserAccountsDrawerHeader(
             decoration: BoxDecoration(color: Colors.red[600]),
             accountName: Text(adminName),
-            accountEmail: Text(adminEmail),
+            accountEmail: Text("$adminEmail  (${adminRole.toUpperCase()})"),
             currentAccountPicture: GestureDetector(
               onTap: _showProfileLinkDialog,
               child: CircleAvatar(
@@ -157,25 +227,37 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
             ),
           ),
-          ListTile(
-            leading: const Icon(Icons.person_add),
-            title: const Text("Promote Admin"),
-            onTap: () {
-              Navigator.pop(context);
-              _showPromoteDialog();
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.manage_accounts),
-            title: const Text("Manage Admins"),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ManageAdminsPage()),
-              );
-            },
-          ),
+
+          // 🔐 Only admins with permission can change roles
+         // 🔐 Only admins with permission can change roles
+if (canPromoteAdmin)
+  ListTile(
+    leading: const Icon(Icons.person_add),
+    title: const Text("Promote / Edit Admin Permissions"),
+    onTap: () {
+      Navigator.pop(context);
+      _showPromoteRoleDialog();
+    },
+  ),
+
+// ⭐ NEW — MANAGE ADMINS BELOW PROMOTE
+if (isSuperAdmin || isPowerAdmin)
+  ListTile(
+    leading: const Icon(Icons.manage_accounts, color: Colors.blue),
+    title: const Text("Manage Admins"),
+    onTap: () {
+      Navigator.pop(context);
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ManageAdminsPage()),
+      );
+    },
+  ),
+
+
+          // Manage Admins – probably only for higher roles
+       
+
           ListTile(
             leading: const Icon(Icons.build, color: Colors.deepPurple),
             title: const Text("Fix Admin CreatedAt"),
@@ -184,22 +266,57 @@ class _AdminDashboardState extends State<AdminDashboard> {
               _fixAdminCreatedAt();
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.bolt, color: Colors.purple),
-            title: const Text("Add Daily Question"),
-            onTap: () {
-              Navigator.pop(context);
-              _showDailyQuestionDialog();
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.delete, color: Colors.red),
-            title: const Text("Delete Daily Question"),
-            onTap: () {
-              Navigator.pop(context);
-              _showDeleteDailyQuestionDialog();
-            },
-          ),
+
+          if (canAddDailyQuestion)
+            ListTile(
+              leading: const Icon(Icons.bolt, color: Colors.purple),
+              title: const Text("Add Daily Question"),
+              onTap: () {
+                Navigator.pop(context);
+                _showDailyQuestionDialog();
+              },
+            ),
+
+          if (canDeleteDailyQuestion)
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text("Delete Daily Question"),
+              onTap: () {
+                Navigator.pop(context);
+                _showDeleteDailyQuestionDialog();
+              },
+            ),
+
+          if (canAddTeam)
+            ListTile(
+              leading: const Icon(Icons.group_add, color: Colors.indigo),
+              title: const Text('Add Team'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AddTeamPage()),
+                );
+              },
+            ),
+            // ================= PREMIUM MANAGEMENT =================
+
+
+// ⭐ ADD PREMIUM USERS (Manual Assign)
+if (canAddPremiumUsers)
+  ListTile(
+    leading: const Icon(Icons.verified_user, color: Colors.green),
+    title: const Text("Add Premium Users"),
+    onTap: () {
+      Navigator.pop(context);
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const AdminPremiumUsersPage()),
+      );
+    },
+  ),
+
+
           ListTile(
             leading: const Icon(Icons.send, color: Colors.teal),
             title: const Text("Send Notification"),
@@ -228,17 +345,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               );
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.verified_user, color: Colors.indigo),
-            title: const Text("Add Premium Users"),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => const AdminPremiumUsersPage()),
-              );
-            },
-          ),
+          
           const Divider(),
           ListTile(
             leading: const Icon(Icons.switch_account, color: Colors.blue),
@@ -277,6 +384,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  // ======================================================================
+  // DASHBOARD BODY
+  // ======================================================================
+
   void _toggleTheme() {
     setState(() {
       isDarkMode = !isDarkMode;
@@ -302,63 +413,103 @@ class _AdminDashboardState extends State<AdminDashboard> {
             "Welcome, $adminName!",
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 8),
-          Text(adminEmail,
-              style: const TextStyle(color: Colors.grey, fontSize: 16)),
-          const SizedBox(height: 24),
-          const Text("Quick Actions",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                  child: _buildActionCard(
-                      "Upload Notes", Icons.upload_file, Colors.blue)),
-              const SizedBox(width: 12),
-              Expanded(
-                  child: _buildActionCard(
-                      "Upload PYQs", Icons.upload_file, Colors.green)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                  child: _buildActionCard("Upload Question Bank",
-                      Icons.upload_file, Colors.orange)),
-              const SizedBox(width: 12),
-              Expanded(
-                  child: _buildActionCard(
-                      "Upload Quiz", Icons.quiz, Colors.purple)),
-            ],
+          const SizedBox(height: 4),
+          Text(
+            "$adminEmail (${adminRole.toUpperCase()})",
+            style: const TextStyle(color: Colors.grey, fontSize: 14),
           ),
           const SizedBox(height: 24),
-          const Text("Manage Content",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                  child: _buildManageCard(
-                      "Manage Notes", Icons.book, Colors.blue, "notes")),
-              const SizedBox(width: 12),
-              Expanded(
-                  child: _buildManageCard(
-                      "Manage PYQs", Icons.description, Colors.green, "pyqs")),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                  child: _buildManageCard("Manage Question Bank",
-                      Icons.library_books, Colors.orange, "question_banks")),
-              const SizedBox(width: 12),
-              Expanded(
-                  child: _buildManageCard(
-                      "Manage Quiz", Icons.quiz, Colors.purple, "quiz")),
-            ],
-          ),
+
+          // ================= QUICK ACTIONS (UPLOAD CONTENT) =================
+          if (canUploadContent) ...[
+            const Text("Quick Actions",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                    child: _buildActionCard(
+                        "Upload Notes", Icons.upload_file, Colors.blue)),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: _buildActionCard(
+                        "Upload PYQs", Icons.upload_file, Colors.green)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                    child: _buildActionCard("Upload Question Bank",
+                        Icons.upload_file, Colors.orange)),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: _buildActionCard(
+                        "Upload Quiz", Icons.quiz, Colors.purple)),
+              ],
+            ),
+            const SizedBox(height: 24),
+          ],
+
+          // ================= MANAGE CONTENT =================
+          if (canManageContent) ...[
+            const Text("Manage Content",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                    child: _buildManageCard(
+                        "Manage Notes", Icons.book, Colors.blue, "notes")),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: _buildManageCard("Manage PYQs",
+                        Icons.description, Colors.green, "pyqs")),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                    child: _buildManageCard(
+                        "Manage Question Bank",
+                        Icons.library_books,
+                        Colors.orange,
+                        "question_banks")),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: _buildManageCard(
+                        "Manage Quiz", Icons.quiz, Colors.purple, "quiz")),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // ================= PREMIUMS / PAYMENTS =================
+          if (canSetPremiums || canViewPayments)
+            Row(
+              children: [
+                Expanded(
+                  child: canSetPremiums
+                      ? _buildPremiumCard(
+                          "Set Premiums",
+                          Icons.workspace_premium_rounded,
+                          Colors.amber,
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: canViewPayments
+                      ? _buildAdminPaymentHistoryCard(
+                          "Payment History",
+                          Icons.history,
+                          Colors.teal,
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -371,6 +522,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () {
+          if (!canUploadContent) return; // safety
+
           if (title == "Upload Notes") {
             _showUploadDialog("notes");
           } else if (title == "Upload PYQs") {
@@ -409,11 +562,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () {
+          if (!canManageContent) return;
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => hierarchical.AdminHierarchicalContentManager(
-                  category: category),
+              builder: (_) =>
+                  hierarchical.AdminHierarchicalContentManager(
+                      category: category),
             ),
           );
         },
@@ -436,7 +591,80 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // ========================= UPLOAD DIALOG =========================
+  Widget _buildPremiumCard(String title, IconData icon, Color color) {
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          if (!canSetPremiums) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SetPremiumsPage()),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Icon(icon, size: 40, color: color),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAdminPaymentHistoryCard(
+      String title, IconData icon, Color color) {
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          if (!canViewPayments) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => const AdminPaymentHistoryPage()),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Icon(icon, size: 40, color: color),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ======================================================================
+  // UPLOAD DIALOG (Notes / PYQs / QB / Quiz PDFs)
+  // ======================================================================
+
   void _showUploadDialog(String category) {
     final subjectController = TextEditingController();
     final chapterController = TextEditingController();
@@ -614,12 +842,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         .get();
 
                     String subjectId;
-                    String finalImageUrl = subjectImageUrl ?? '';
 
                     if (existingQuery.docs.isNotEmpty) {
                       subjectId = existingQuery.docs.first.id;
-                      finalImageUrl =
-                          existingQuery.docs.first.data()['imageUrl'];
                     } else {
                       final newSubjectDoc = await FirebaseFirestore.instance
                           .collection(collections["subjects"]!)
@@ -648,7 +873,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       "title": titleController.text.trim(),
                       "downloadUrl": pdfUrl,
                       "chapterId": chapterDoc.id,
-                      "isPremium": isPremium, // ✅ ADDED
+                      "isPremium": isPremium,
                       "uploadedAt": FieldValue.serverTimestamp(),
                     });
 
@@ -673,7 +898,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // ========================= Daily Question: Add =========================
+  // ======================================================================
+  // Daily Question: Add
+  // ======================================================================
 
   void _showDailyQuestionDialog() {
     final questionController = TextEditingController();
@@ -823,7 +1050,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // ========================= Daily Question: Delete Latest =========================
+  // ======================================================================
+  // Daily Question: Delete Latest
+  // ======================================================================
 
   void _showDeleteDailyQuestionDialog() async {
     final snapshot = await FirebaseFirestore.instance
@@ -889,7 +1118,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // ========================= Profile Link Dialog (Missing implementation) =========================
+  // ======================================================================
+  // Profile Link (placeholder)
+  // ======================================================================
+
   void _showProfileLinkDialog() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -897,69 +1129,285 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // ========================= Promote Admin Dialog (Missing implementation) =========================
-  void _showPromoteDialog() {
-    final emailController = TextEditingController();
+  // ======================================================================
+  // NEW: Promote Role + Permissions Dialog
+  // ======================================================================
 
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Promote to Admin"),
-        content: TextField(
-          controller: emailController,
-          decoration: const InputDecoration(labelText: "User Email"),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final email = emailController.text.trim();
-              if (email.isEmpty) return;
-
-              try {
-                final snapshot = await FirebaseFirestore.instance
-                    .collection('users')
-                    .where('email', isEqualTo: email)
-                    .limit(1)
-                    .get();
-
-                if (snapshot.docs.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text("❌ No user found with this email")),
-                  );
-                  return;
-                }
-
-                final userDocId = snapshot.docs.first.id;
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(userDocId)
-                    .update({'role': 'admin'});
-
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                      content: Text("✅ $email promoted to Admin"),
-                      backgroundColor: Colors.green),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Error: $e")),
-                );
-              }
-            },
-            child: const Text("Promote"),
-          ),
-        ],
-      ),
+  void _showPromoteRoleDialog() {
+  if (!canPromoteAdmin) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("❌ You don't have permission.")),
     );
+    return;
   }
 
-  // 🚨 CORRECTED & COMPLETED: Notification Dialog with Cloud Functions Call 🚨
+  final emailController = TextEditingController();
+  String? selectedRole;
+  Map<String, dynamic>? userData;
+  String? userId;
+  bool loading = false;
+
+  bool permUploadContent = false;
+  bool permManageContent = false;
+  bool permSetPremiums = false;
+  bool permViewPayments = false;
+  bool permAddDailyQuestion = false;
+  bool permDeleteDailyQuestion = false;
+  bool permPromoteAdmin = false;
+  bool permAddTeam = false;
+  bool permAddPremiumUsers = false; // ⭐ NEW PERMISSION
+
+  showDialog(
+    context: context,
+    builder: (_) => StatefulBuilder(
+      builder: (context, setState) {
+        Future<void> searchUser() async {
+          final email = emailController.text.trim();
+          if (email.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Enter an email")),
+            );
+            return;
+          }
+
+          setState(() => loading = true);
+
+          final snap = await FirebaseFirestore.instance
+              .collection('users')
+              .where('email', isEqualTo: email)
+              .limit(1)
+              .get();
+
+          if (snap.docs.isEmpty) {
+            setState(() {
+              userData = null;
+              userId = null;
+              loading = false;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("❌ No user found")),
+            );
+            return;
+          }
+
+          final data = snap.docs.first.data();
+          final role = (data['role'] as String?)?.trim() ?? 'user';
+
+          // initialize permissions
+          permUploadContent =
+              (data['perm_uploadContent'] as bool?) ?? (role != 'user');
+          permManageContent =
+              (data['perm_manageContent'] as bool?) ?? (role != 'user');
+          permSetPremiums =
+              (data['perm_setPremiums'] as bool?) ?? (role != 'user');
+          permViewPayments =
+              (data['perm_viewPayments'] as bool?) ?? (role != 'user');
+          permAddDailyQuestion =
+              (data['perm_addDailyQuestion'] as bool?) ?? (role != 'user');
+          permDeleteDailyQuestion =
+              (data['perm_deleteDailyQuestion'] as bool?) ?? (role != 'user');
+          permPromoteAdmin =
+              (data['perm_promoteAdmin'] as bool?) ?? (role == 'super_admin');
+          permAddTeam =
+              (data['perm_addTeam'] as bool?) ?? (role != 'user');
+
+          // ⭐ NEW: Add Premium Users permission
+          permAddPremiumUsers =
+              (data['perm_addPremiumUsers'] as bool?) ?? (role != 'user');
+
+          setState(() {
+            userData = data;
+            userId = snap.docs.first.id;
+            selectedRole = role;
+            loading = false;
+          });
+        }
+
+        Future<void> updateUser() async {
+          if (userId == null || selectedRole == null) return;
+
+          // prevent removing your own super_admin
+          final currentUser = _auth.currentUser;
+          if (currentUser != null &&
+              currentUser.uid == userId &&
+              adminRole == 'super_admin' &&
+              selectedRole != 'super_admin') {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content: Text("❌ You cannot remove your own SUPER_ADMIN role.")),
+            );
+            return;
+          }
+
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userId)
+              .update({
+            'role': selectedRole,
+            'perm_uploadContent': permUploadContent,
+            'perm_manageContent': permManageContent,
+            'perm_setPremiums': permSetPremiums,
+            'perm_viewPayments': permViewPayments,
+            'perm_addDailyQuestion': permAddDailyQuestion,
+            'perm_deleteDailyQuestion': permDeleteDailyQuestion,
+            'perm_promoteAdmin': permPromoteAdmin,
+            'perm_addTeam': permAddTeam,
+            'perm_addPremiumUsers': permAddPremiumUsers, // ⭐ NEW
+          });
+
+          Navigator.pop(context);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("✅ Role & permissions updated to $selectedRole")),
+          );
+        }
+
+        return AlertDialog(
+          title: const Text("Change User Role & Permissions"),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 350,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: emailController,
+                    decoration: const InputDecoration(
+                      labelText: "Enter user email",
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: ElevatedButton(
+                      onPressed: loading ? null : searchUser,
+                      child: const Text("Search"),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  if (loading) const CircularProgressIndicator(),
+                  const SizedBox(height: 10),
+                  if (userData != null) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("Name: ${userData!['fullName'] ?? 'Unknown'}"),
+                          Text("Current Role: ${(userData!['role'] ?? 'user')}"),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      decoration:
+                          const InputDecoration(labelText: "Select New Role"),
+                      value: selectedRole,
+                      items: const [
+                        DropdownMenuItem(value: "user", child: Text("User")),
+                        DropdownMenuItem(value: "admin", child: Text("Admin")),
+                        DropdownMenuItem(
+                            value: "power_admin", child: Text("Power Admin")),
+                        DropdownMenuItem(
+                            value: "super_admin", child: Text("Super Admin")),
+                      ],
+                      onChanged: (value) {
+                        setState(() => selectedRole = value);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    const Divider(),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "Permissions",
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ),
+
+                    // PERMISSION SWITCHES
+                    SwitchListTile(
+                      title: const Text("Upload Content"),
+                      value: permUploadContent,
+                      onChanged: (v) =>
+                          setState(() => permUploadContent = v),
+                    ),
+                    SwitchListTile(
+                      title: const Text("Manage Content"),
+                      value: permManageContent,
+                      onChanged: (v) =>
+                          setState(() => permManageContent = v),
+                    ),
+                    SwitchListTile(
+                      title: const Text("Set Premiums"),
+                      value: permSetPremiums,
+                      onChanged: (v) =>
+                          setState(() => permSetPremiums = v),
+                    ),
+                    SwitchListTile(
+                      title: const Text("View Payment History"),
+                      value: permViewPayments,
+                      onChanged: (v) =>
+                          setState(() => permViewPayments = v),
+                    ),
+                    SwitchListTile(
+                      title: const Text("Add Daily Question"),
+                      value: permAddDailyQuestion,
+                      onChanged: (v) =>
+                          setState(() => permAddDailyQuestion = v),
+                    ),
+                    SwitchListTile(
+                      title: const Text("Delete Daily Question"),
+                      value: permDeleteDailyQuestion,
+                      onChanged: (v) =>
+                          setState(() => permDeleteDailyQuestion = v),
+                    ),
+                    SwitchListTile(
+                      title: const Text("Promote Admin"),
+                      value: permPromoteAdmin,
+                      onChanged: (v) =>
+                          setState(() => permPromoteAdmin = v),
+                    ),
+                    SwitchListTile(
+                      title: const Text("Add Team"),
+                      value: permAddTeam,
+                      onChanged: (v) => setState(() => permAddTeam = v),
+                    ),
+
+                    // ⭐ NEW: Add Premium Users
+                    SwitchListTile(
+                      title: const Text("Add Premium Users"),
+                      value: permAddPremiumUsers,
+                      onChanged: (v) =>
+                          setState(() => permAddPremiumUsers = v),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: const Text("Cancel"),
+              onPressed: () => Navigator.pop(context),
+            ),
+            if (userData != null && selectedRole != null)
+              ElevatedButton(
+                child: const Text("Update"),
+                onPressed: updateUser,
+              ),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+
+  // ======================================================================
+  // Notification Dialog (unchanged logic, just kept here)
+  // ======================================================================
 
   void _showNotificationDialog() {
     final titleController = TextEditingController();

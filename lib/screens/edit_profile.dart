@@ -3,79 +3,107 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class EditProfilePage extends StatefulWidget {
-  const EditProfilePage({super.key});
+  final String currentName;
+  final String currentCollege;
+  final String currentEmail;
+  final String currentPhone;
+
+  const EditProfilePage({
+    super.key,
+    required this.currentName,
+    required this.currentCollege,
+    required this.currentEmail,
+    required this.currentPhone,
+  });
 
   @override
   State<EditProfilePage> createState() => _EditProfilePageState();
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-  final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
+  late TextEditingController nameCtrl;
+  late TextEditingController collegeCtrl;
+  late TextEditingController emailCtrl;
+  late TextEditingController phoneCtrl;
+
+  bool saving = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    nameCtrl = TextEditingController(text: widget.currentName);
+    collegeCtrl = TextEditingController(text: widget.currentCollege);
+    emailCtrl = TextEditingController(text: widget.currentEmail);
+    phoneCtrl = TextEditingController(text: widget.currentPhone);
   }
 
-  Future<void> _loadUserData() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid != null) {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      if (doc.exists) {
-        _nameController.text = doc['fullName'] ?? '';
-        _phoneController.text = doc['phone'] ?? '';
-      }
-    }
-  }
+  Future<void> saveProfile() async {
+    setState(() => saving = true);
 
-  Future<void> _saveProfile() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid != null) {
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'fullName': _nameController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'email': FirebaseAuth.instance.currentUser?.email ?? '',
-      }, SetOptions(merge: true));
+    if (uid == null) return;
 
-      Navigator.pop(context); // go back to HomePage
-    }
+    await FirebaseFirestore.instance.collection('users').doc(uid).update({
+      'fullName': nameCtrl.text.trim(),
+      'college': collegeCtrl.text.trim(),
+      'email': emailCtrl.text.trim(),
+      'phone': phoneCtrl.text.trim(),
+    });
+
+    if (mounted) Navigator.pop(context);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Profile Updated Successfully")),
+    );
+
+    setState(() => saving = false);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Edit Profile")),
+      appBar: AppBar(
+        title: const Text("Edit Profile"),
+        backgroundColor: Colors.blue,
+      ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: "Full Name"),
-                validator: (value) => value!.isEmpty ? "Enter name" : null,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(labelText: "Name"),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: collegeCtrl,
+              decoration: const InputDecoration(labelText: "College"),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: emailCtrl,
+              decoration: const InputDecoration(labelText: "Email"),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: phoneCtrl,
+              decoration: const InputDecoration(labelText: "Phone Number"),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: saving ? null : saveProfile,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                ),
+                child: saving
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text("Save"),
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _phoneController,
-                decoration: const InputDecoration(labelText: "Phone"),
-                validator: (value) => value!.isEmpty ? "Enter phone" : null,
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () {
-                  if (_formKey.currentState!.validate()) {
-                    _saveProfile();
-                  }
-                },
-                child: const Text("Save"),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

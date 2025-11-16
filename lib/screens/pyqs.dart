@@ -206,7 +206,7 @@ class _PyqsPageState extends State<PyqsPage> {
   }
 
   // =================== SUBJECTS ===================
-  Widget _buildSubjectList() {
+Widget _buildSubjectList() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection("pyqsSubjects")
@@ -214,7 +214,7 @@ class _PyqsPageState extends State<PyqsPage> {
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        if (snapshot.data!.docs.isEmpty) return const Center(child: Text("No subjects found"));
+        if (  snapshot.data!.docs.isEmpty) return const Center(child: Text("No subjects found"));
 
         return GridView.builder(
           padding: const EdgeInsets.all(16),
@@ -392,31 +392,51 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
     _downloadAndLoadPdf();
   }
 
-  Future<void> _downloadAndLoadPdf() async {
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final safeName = widget.title.replaceAll(RegExp(r'[^\w\d_-]'), '_');
-      final file = File("${dir.path}/pyqs_$safeName.pdf");
+ Future<void> _downloadAndLoadPdf() async {
+  try {
+    final dir = await getApplicationDocumentsDirectory();
 
-      if (await file.exists()) {
-        _localPath = file.path;
-      } else {
-        final response = await http.get(Uri.parse(widget.url));
-        if (response.statusCode != 200) throw Exception('Failed to download PDF');
-        await file.writeAsBytes(response.bodyBytes, flush: true);
-        _localPath = file.path;
-      }
+    // Safe hashed file name (no conflict, unique)
+    final fileName = "pyqs_${widget.url.hashCode}.pdf";
+    final file = File("${dir.path}/$fileName");
 
+    // 🟢 If file already exists → load offline
+    if (await file.exists()) {
+      _localPath = file.path;
       setState(() => _isLoading = false);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Failed to load PDF: $e")),
-        );
-        setState(() => _isLoading = false);
-      }
+      return;
+    }
+
+    // 🟡 First-time download
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("⏳ Downloading PDF...")),
+    );
+
+    final response = await http.get(Uri.parse(widget.url));
+
+    if (response.statusCode != 200) {
+      throw Exception("Failed to download PDF");
+    }
+
+    // Save locally
+    await file.writeAsBytes(response.bodyBytes, flush: true);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("✅ PDF saved for offline use")),
+    );
+
+    _localPath = file.path;
+    setState(() => _isLoading = false);
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ Failed to load PDF: $e")),
+      );
+      setState(() => _isLoading = false);
     }
   }
+}
+
 
   @override
   Widget build(BuildContext context) {

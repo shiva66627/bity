@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/device_id.dart'; // ✅ IMPORTANT
 import 'home_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -18,8 +19,45 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _isLoading = false;
   bool _isResettingPassword = false;
-  bool _obscurePassword = true; // 👁️ Password toggle state
+  bool _obscurePassword = true;
 
+  // ----------------------------------------------------------
+  // 🔥 LISTEN FOR SESSION CHANGES (LOGOUT OTHER DEVICE)
+  // ----------------------------------------------------------
+  void _listenSession(String uid, String myDeviceId) {
+    FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .listen((doc) async {
+      if (!doc.exists) return;
+
+      String? activeId = doc['activeDeviceId'];
+
+      if (activeId != null && activeId != myDeviceId) {
+        // Another device logged in
+        await FirebaseAuth.instance.signOut();
+
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(
+              context, '/login', (route) => false);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                "You were logged out because this account was used on another device.",
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  // ----------------------------------------------------------
+  // 🔥 RESET PASSWORD
+  // ----------------------------------------------------------
   Future<void> _resetPassword() async {
     if (_emailController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -29,6 +67,7 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     setState(() => _isResettingPassword = true);
+
     try {
       await _auth.sendPasswordResetEmail(email: _emailController.text.trim());
       showDialog(
@@ -38,17 +77,16 @@ class _LoginPageState extends State<LoginPage> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Check your email inbox or spam folder for the reset link.'),
+              const Text('Check your email inbox or spam folder.'),
               const SizedBox(height: 8),
-              Text(_emailController.text.trim(),
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                _emailController.text.trim(),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("OK"),
-            ),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
           ],
         ),
       );
@@ -61,8 +99,12 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  // ----------------------------------------------------------
+  // 🔥 LOGIN USER + SINGLE DEVICE ENFORCEMENT
+  // ----------------------------------------------------------
   Future<void> _loginUser() async {
     setState(() => _isLoading = true);
+
     try {
       UserCredential userCredential = await _auth.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
@@ -75,23 +117,44 @@ class _LoginPageState extends State<LoginPage> {
         DocumentSnapshot doc =
             await _firestore.collection('users').doc(user.uid).get();
 
-        if (doc.exists) {
-          // ✅ Navigate to HomePage and clear back stack
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const HomePage()),
-            (route) => false,
-          );
-        } else {
+        if (!doc.exists) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("User data not found in Firestore")),
           );
+          return;
         }
+
+        // -------------------------------------------
+        // 🔥 GET DEVICE ID
+        // -------------------------------------------
+        String deviceId = await DeviceIdHelper.getDeviceId();
+
+        // -------------------------------------------
+        // 🔥 UPDATE FIRESTORE WITH DEVICE ID
+        // -------------------------------------------
+        await _firestore.collection('users').doc(user.uid).update({
+          "activeDeviceId": deviceId,
+        });
+
+        // -------------------------------------------
+        // 🔥 START LISTENING FOR SESSION INVALIDATION
+        // -------------------------------------------
+        _listenSession(user.uid, deviceId);
+
+        // -------------------------------------------
+        // 🔥 NAVIGATE TO HOME PAGE
+        // -------------------------------------------
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const HomePage()),
+          (route) => false,
+        );
       }
     } on FirebaseAuthException catch (e) {
       String message = "Login failed. Please try again.";
       if (e.code == 'user-not-found') message = "No user found with this email.";
       if (e.code == 'wrong-password') message = "Invalid credentials.";
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
@@ -100,6 +163,9 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  // ----------------------------------------------------------
+  // 🔥 UI
+  // ----------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -112,22 +178,24 @@ class _LoginPageState extends State<LoginPage> {
             children: [
               Text("MBBSFreaks",
                   style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue.shade700)),
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade700,
+                  )),
               const SizedBox(height: 6),
               const Text(
                 "Your Medical Journey Starts Here",
                 style: TextStyle(fontSize: 16, color: Colors.black54),
               ),
               const SizedBox(height: 24),
+
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: Image.asset("assets/loggos.jpeg", height: 300),
               ),
               const SizedBox(height: 32),
 
-              // 📧 Email
+              // Email
               TextField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
@@ -141,7 +209,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 16),
 
-              // 🔐 Password with Eye Toggle
+              // Password
               TextField(
                 controller: _passwordController,
                 obscureText: _obscurePassword,
@@ -153,38 +221,29 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off
-                          : Icons.visibility,
+                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
                       color: Colors.grey,
                     ),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                   ),
                 ),
               ),
 
               const SizedBox(height: 8),
 
-              // Forgot Password
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: _isResettingPassword ? null : _resetPassword,
                   child: _isResettingPassword
                       ? const CircularProgressIndicator(strokeWidth: 2)
-                      : const Text(
-                          "Forgot Password?",
-                          style: TextStyle(color: Colors.blue),
-                        ),
+                      : const Text("Forgot Password?",
+                          style: TextStyle(color: Colors.blue)),
                 ),
               ),
               const SizedBox(height: 16),
 
-              // 🔵 Login Button
+              // Login button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -195,16 +254,14 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   child: _isLoading
                       ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          "Login",
-                          style: TextStyle(fontSize: 18, color: Colors.white),
-                        ),
+                      : const Text("Login",
+                          style: TextStyle(fontSize: 18, color: Colors.white)),
                 ),
               ),
 
               const SizedBox(height: 16),
 
-              // 📝 Signup
+              // Signup
               GestureDetector(
                 onTap: () => Navigator.pushNamed(context, '/signup'),
                 child: const Text(
@@ -218,19 +275,6 @@ class _LoginPageState extends State<LoginPage> {
               ),
 
               const SizedBox(height: 16),
-
-              // 🧑‍💼 Admin Login
-              GestureDetector(
-                onTap: () => Navigator.pushNamed(context, '/admin_login'),
-                child: const Text(
-                  "Admin Login",
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.bold,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
-              ),
             ],
           ),
         ),

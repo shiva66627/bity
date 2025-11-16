@@ -14,14 +14,15 @@ class SignupPage extends StatefulWidget {
 class _SignupPageState extends State<SignupPage> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
+  final TextEditingController collegeController = TextEditingController(); // ✅ NEW
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   bool _isLoading = false;
-  bool _obscurePassword = true; // 👁️ Toggle state
+  bool _obscurePassword = true;
 
-  /// 🔹 Signup with Email & Password
+  /// ✅ Signup with Email & Password
   Future<void> _signupUser() async {
     setState(() => _isLoading = true);
     try {
@@ -40,12 +41,13 @@ class _SignupPageState extends State<SignupPage> {
           .set({
         'fullName': nameController.text.trim(),
         'phone': phoneController.text.trim(),
+        'collegeName': collegeController.text.trim(), // ✅ ADDED
         'email': emailController.text.trim(),
         'role': 'user',
+        'premiumYears': [], // ✅ ADDED (default)
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // ✅ Navigate to HomePage and clear Login/Signup from stack
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const HomePage()),
@@ -62,31 +64,28 @@ class _SignupPageState extends State<SignupPage> {
       } else {
         message = e.message ?? message;
       }
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  /// 🔹 Signup with Google
+  /// ✅ Signup with Google
   Future<void> _signupWithGoogle() async {
     try {
       final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) return; // User cancelled sign-in
+      if (googleUser == null) return;
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
+      final googleAuth = await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      UserCredential userCredential =
-          await _auth.signInWithCredential(credential);
+      UserCredential userCredential = await _auth.signInWithCredential(credential);
 
-      // ✅ Save user data in Firestore (merge to avoid overwriting)
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user!.uid)
@@ -94,11 +93,12 @@ class _SignupPageState extends State<SignupPage> {
         'fullName': userCredential.user?.displayName ?? '',
         'phone': '',
         'email': userCredential.user?.email ?? '',
+        'collegeName': '', // ✅ NEW
         'role': 'user',
+        'premiumYears': [], // ✅ NEW
         'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      // ✅ Navigate to HomePage and clear Login/Signup from stack
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const HomePage()),
@@ -125,10 +125,7 @@ class _SignupPageState extends State<SignupPage> {
               const SizedBox(height: 20),
               const Text(
                 "Join MBBSFreaks",
-                style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue),
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.blue),
               ),
               const SizedBox(height: 6),
               const Text(
@@ -143,8 +140,7 @@ class _SignupPageState extends State<SignupPage> {
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.person),
                   labelText: "Full Name",
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
               const SizedBox(height: 20),
@@ -156,8 +152,18 @@ class _SignupPageState extends State<SignupPage> {
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.phone),
                   labelText: "Phone Number",
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // ✅ College Name
+              TextField(
+                controller: collegeController,
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.school),
+                  labelText: "College Name",
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
               const SizedBox(height: 20),
@@ -169,32 +175,26 @@ class _SignupPageState extends State<SignupPage> {
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.email),
                   labelText: "Email",
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
               const SizedBox(height: 20),
 
-              // Password with Eye Toggle
+              // Password
               TextField(
                 controller: passwordController,
                 obscureText: _obscurePassword,
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.lock),
                   labelText: "Password",
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off
-                          : Icons.visibility,
+                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
                       color: Colors.grey,
                     ),
                     onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
+                      setState(() => _obscurePassword = !_obscurePassword);
                     },
                   ),
                 ),
@@ -208,14 +208,12 @@ class _SignupPageState extends State<SignupPage> {
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(25)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
                   ),
                   onPressed: _isLoading ? null : _signupUser,
                   child: _isLoading
                       ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text("Sign Up",
-                          style: TextStyle(fontSize: 18)),
+                      : const Text("Sign Up", style: TextStyle(fontSize: 18)),
                 ),
               ),
               const SizedBox(height: 20),
@@ -224,10 +222,7 @@ class _SignupPageState extends State<SignupPage> {
               Row(
                 children: const [
                   Expanded(child: Divider(thickness: 1)),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8),
-                    child: Text("OR"),
-                  ),
+                  Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text("OR")),
                   Expanded(child: Divider(thickness: 1)),
                 ],
               ),
@@ -246,10 +241,8 @@ class _SignupPageState extends State<SignupPage> {
                       side: const BorderSide(color: Colors.grey),
                     ),
                   ),
-                  icon: const Icon(Icons.g_mobiledata,
-                      size: 28, color: Colors.red),
-                  label: const Text("Sign Up with Google",
-                      style: TextStyle(fontSize: 16)),
+                  icon: const Icon(Icons.g_mobiledata, size: 28, color: Colors.red),
+                  label: const Text("Sign Up with Google", style: TextStyle(fontSize: 16)),
                   onPressed: _signupWithGoogle,
                 ),
               ),
