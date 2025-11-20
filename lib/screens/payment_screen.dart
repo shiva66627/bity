@@ -123,7 +123,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         "${widget.selectedYear} - $subjectNames - $subjectCount Subject${subjectCount > 1 ? 's' : ''}";
 
     var options = {
-      'key': 'rzp_live_Rg19MzdYC6BYmI',   // ⭐ ADD YOUR LIVE KEY HERE
+      'key': '***',   // ⭐ ADD YOUR LIVE KEY HERE
       'amount': finalAmount,
       'name': 'MBBS Freaks',
       'description': dynamicTitle,
