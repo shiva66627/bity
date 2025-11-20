@@ -36,8 +36,8 @@ android {
         applicationId = "com.mbbsfreaks.app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = 4
-        versionName = "1.0.4"
+        versionCode = 6
+        versionName = "1.0.6"
         multiDexEnabled = true
     }
 

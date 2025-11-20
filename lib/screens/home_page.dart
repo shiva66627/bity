@@ -15,6 +15,8 @@ import 'full_reviews_page.dart';
 import 'all_offers_page.dart';
 import '../utils/device_id.dart';
 import 'profile_details_page.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
 
 
 class HomePage extends StatefulWidget {
@@ -60,6 +62,7 @@ class _HomePageState extends State<HomePage> {
 
  Future<void> fetchUserData() async {
   final uid = FirebaseAuth.instance.currentUser?.uid;
+
   if (uid != null) {
     try {
       final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
@@ -281,7 +284,9 @@ class _HomePageState extends State<HomePage> {
                     const SizedBox(height: 20),
                     if (recentActivity != null) _buildRecentActivityCard(),
                     const SizedBox(height: 20),
-                    _buildStudentReviews(),
+                    _buildStudentReviews()
+
+
                   ],
                 ),
               ),
@@ -314,17 +319,35 @@ class _HomePageState extends State<HomePage> {
 ),
 
 
-          ListTile(
-            leading: const Icon(Icons.notifications, color: Colors.deepOrange),
-            title: const Text("Notifications"),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const NotificationsPage()),
-              );
-            },
-          ),
+   ListTile(
+  leading: const Icon(Icons.notifications, color: Colors.deepOrange),
+  title: const Text("Notifications"),
+  onTap: () {
+    Navigator.pop(context);
+
+    // 🔥 All admins: admin + super_admin + power_admin
+    if (isAdmin) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const NotificationsPage()),
+      );
+      
+    }
+    else {
+      // USER VIEW
+      Navigator.pushNamed(context, '/user_notifications');
+    }
+
+
+    // 🔥 Users (normal people)
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const NotificationsPage()),
+    );
+  },
+),
+
+
           ListTile(
             leading: const Icon(Icons.feedback, color: Colors.green),
             title: const Text("Feedback for Improving App"),

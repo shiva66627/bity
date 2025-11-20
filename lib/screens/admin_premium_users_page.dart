@@ -16,9 +16,13 @@ class _AdminPremiumUsersPageState extends State<AdminPremiumUsersPage> {
 
   int premiumCount = 0, y1 = 0, y2 = 0, y3 = 0, y4 = 0;
 
+  // ---------------------------------------------------------
+  // ✅ FIXED FUNCTION — ADMIN USERS GET FULL ACCESS LIKE PAYMENT
+  // ---------------------------------------------------------
   Future<void> _grantPremium() async {
     final email = emailController.text.trim();
     if (email.isEmpty) return;
+
     setState(() => isLoading = true);
 
     try {
@@ -32,24 +36,47 @@ class _AdminPremiumUsersPageState extends State<AdminPremiumUsersPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("⚠️ User not found")),
         );
-      } else {
-        final docRef = query.docs.first.reference;
-        final data = (await docRef.get()).data() as Map<String, dynamic>;
-        final List<String> years = List<String>.from(data['premiumYears'] ?? []);
-        if (!years.contains(selectedYear)) {
-          years.add(selectedYear);
-          await docRef.update({'premiumYears': years});
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("✅ $email granted $selectedYear")),
-        );
-        emailController.clear();
+        return;
       }
+
+      final docRef = query.docs.first.reference;
+      final data = (await docRef.get()).data() as Map<String, dynamic>;
+
+      // ---- premiumYears ----
+      final List<String> years = List<String>.from(data['premiumYears'] ?? []);
+      if (!years.contains(selectedYear)) years.add(selectedYear);
+
+      // ---- premiumSubjects (unlock ALL subjects) ----
+      final Map<String, dynamic> subjects =
+          Map<String, dynamic>.from(data['premiumSubjects'] ?? {});
+      subjects[selectedYear] = ["All"]; // FULL ACCESS FOR NOTES
+
+      // ---- premiumExpiries (1 year validity) ----
+      final Map<String, dynamic> expiries =
+          Map<String, dynamic>.from(data['premiumExpiries'] ?? {});
+      expiries[selectedYear] =
+          DateTime.now().add(const Duration(days: 365)).toIso8601String();
+
+      // ---- FINAL UPDATE ----
+      await docRef.update({
+        "premiumYears": years,
+        "premiumSubjects": subjects,
+        "premiumExpiries": expiries,
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("✅ Premium granted for $email ($selectedYear)")),
+      );
+
+      emailController.clear();
     } finally {
       setState(() => isLoading = false);
     }
   }
 
+  // ---------------------------------------------------------
+  // UI BELOW — UNTOUCHED, SAME AS YOUR ORIGINAL
+  // ---------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -70,7 +97,7 @@ class _AdminPremiumUsersPageState extends State<AdminPremiumUsersPage> {
             return years.isNotEmpty;
           }).toList();
 
-          // count logic
+          // Count logic
           premiumCount = premiumUsers.length;
           y1 = y2 = y3 = y4 = 0;
           for (var u in premiumUsers) {
@@ -86,7 +113,6 @@ class _AdminPremiumUsersPageState extends State<AdminPremiumUsersPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ✅ EMAIL INPUT
                 TextField(
                   controller: emailController,
                   decoration: const InputDecoration(
@@ -96,7 +122,6 @@ class _AdminPremiumUsersPageState extends State<AdminPremiumUsersPage> {
                 ),
                 const SizedBox(height: 10),
 
-                // ✅ YEAR DROPDOWN
                 DropdownButtonFormField<String>(
                   value: selectedYear,
                   items: const [
@@ -113,7 +138,6 @@ class _AdminPremiumUsersPageState extends State<AdminPremiumUsersPage> {
                 ),
                 const SizedBox(height: 10),
 
-                // ✅ GRANT BUTTON
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -128,7 +152,6 @@ class _AdminPremiumUsersPageState extends State<AdminPremiumUsersPage> {
                 const Divider(),
                 const SizedBox(height: 10),
 
-                // ✅ YEAR SUMMARY
                 Text("Premium Users: $premiumCount",
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 10),
@@ -141,7 +164,6 @@ class _AdminPremiumUsersPageState extends State<AdminPremiumUsersPage> {
                 Text("4th Year      : $y4"),
                 const SizedBox(height: 20),
 
-                // ✅ VIEW BUTTON
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(

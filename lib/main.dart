@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
 import 'dart:io' show Platform;
+import 'package:mbbsfreaks/screens/user_notifications_page.dart';
 
+import 'package:no_screenshot/no_screenshot.dart';
+
+import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:no_screenshot/no_screenshot.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -27,6 +30,9 @@ import 'screens/notifications_page.dart';
 /// 🔔 Local notification plugin
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
+
+/// Global navigator key so we can navigate from background / notification tap
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 /// 🔔 Local notification display
 Future<void> _showLocalNotification(RemoteMessage message) async {
@@ -69,9 +75,10 @@ Future<void> saveDeviceToken() async {
     'token': token,
     'createdAt': FieldValue.serverTimestamp(),
   });
+  print('🔥 Saved FCM token to Firestore: $token');
 }
 
-/// 🌟 FAST APP START
+/// 🌟 MAIN
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -80,10 +87,77 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Show UI immediately
+  // ⭐ App Check (optional but you already imported it)
+  await FirebaseAppCheck.instance.activate(
+    androidProvider:
+        kReleaseMode ? AndroidProvider.playIntegrity : AndroidProvider.debug,
+    appleProvider: AppleProvider.debug,
+  );
+
+  // ⭐ Local Notification Initialization (BEFORE runApp)
+  const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const initSettings = InitializationSettings(android: androidInit);
+
+  await flutterLocalNotificationsPlugin.initialize(
+    initSettings,
+    // 👉 Tap on notification (when app in foreground/background)
+    onDidReceiveNotificationResponse: (NotificationResponse response) {
+      navigatorKey.currentState?.pushNamed('/notifications');
+    },
+  );
+  print("🔥 NOTIFICATION INITIALIZED");
+
+  // ⭐ Background FCM handler
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+  // ⭐ Ask Notification Permission (Android 13+ + iOS)
+  final settings = await FirebaseMessaging.instance.requestPermission(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+  print("🔥 Notification permission: ${settings.authorizationStatus}");
+
+  // (Optional) extra Android 13 permission via permission_handler
+  if (!kIsWeb && Platform.isAndroid) {
+    final notifStatus = await Permission.notification.status;
+    if (notifStatus.isDenied) {
+      await Permission.notification.request();
+    }
+  }
+
+  // Save token to Firestore
+  await saveDeviceToken();
+
+  // Subscribe everyone to topic "all" (for broadcast)
+  await FirebaseMessaging.instance.subscribeToTopic('all');
+
+  // ⭐ Foreground notifications
+  FirebaseMessaging.onMessage.listen((message) {
+    if (message.notification != null) {
+      _showLocalNotification(message);
+    }
+  });
+
+  // ⭐ When user taps notification and app is in background
+  FirebaseMessaging.onMessageOpenedApp.listen((message) {
+    navigatorKey.currentState?.pushNamed('/notifications');
+  });
+
+  // ⭐ When app is launched from terminated by tapping a notification
+  final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+
+  // Start UI
   runApp(const EducationalApp(startScreen: SplashScreen()));
 
-  // Background heavy initialization
+  // Navigate if opened from terminated state via notification
+  if (initialMessage != null) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      navigatorKey.currentState?.pushNamed('/notifications');
+    });
+  }
+
+  // Background tasks AFTER UI loads
   Future.delayed(Duration.zero, () async {
     await _initializeBackgroundServices();
   });
@@ -97,58 +171,18 @@ Future<void> _initializeBackgroundServices() async {
 
   // Only mobile
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-    // ⭐ FIXED: App Check (debug for dev, playIntegrity for release)
-    await FirebaseAppCheck.instance.activate(
-      androidProvider: kReleaseMode
-          ? AndroidProvider.playIntegrity
-          : AndroidProvider.debug,
-      appleProvider: AppleProvider.debug,
-    );
-
     // Screenshot Lock
     await NoScreenshot.instance.screenshotOff();
 
-    // Local Notification Init
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initSettings = InitializationSettings(android: androidInit);
-    await flutterLocalNotificationsPlugin.initialize(initSettings);
-
-    // Background FCM
-    FirebaseMessaging.onBackgroundMessage(
-      _firebaseMessagingBackgroundHandler,
-    );
-
-    // Notification Permission
-    await FirebaseMessaging.instance.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-
-    // ⭐ Save token to Firestore
-    saveDeviceToken();
-
-    // ⭐ Foreground notifications
-    FirebaseMessaging.onMessage.listen((message) {
-      if (message.notification != null) {
-        _showLocalNotification(message);
-      }
-    });
-
-    // ⭐ Subscribe everyone to "all"
-    FirebaseMessaging.instance.subscribeToTopic('all');
-
-    // Optional Log token
-    FirebaseMessaging.instance.getToken().then((token) {
-      print("🔥 FCM Token: $token");
-    });
+    // Just log token / ensure it exists
+    final token = await FirebaseMessaging.instance.getToken();
+    print("🔥 FCM Token: $token");
   }
 }
 
-/// Navigator key (if needed)
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
 class EducationalApp extends StatefulWidget {
+    // <-- ADD THIS
+
   final Widget startScreen;
   const EducationalApp({super.key, required this.startScreen});
 
@@ -160,6 +194,8 @@ class EducationalApp extends StatefulWidget {
 }
 
 class _EducationalAppState extends State<EducationalApp> {
+      static bool isUserMode = false;   // ✅ CORRECT PLACE
+
   ThemeMode _themeMode = ThemeMode.light;
 
   void changeTheme(ThemeMode mode) {
@@ -188,6 +224,8 @@ class _EducationalAppState extends State<EducationalApp> {
         '/admin_login': (context) => const AdminLoginPage(),
         '/admin_dashboard': (context) => const AdminDashboard(),
         '/notifications': (context) => const NotificationsPage(),
+        '/user_notifications': (context) => const UserNotificationsPage(),
+
       },
     );
   }

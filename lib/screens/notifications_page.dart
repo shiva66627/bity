@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:mbbsfreaks/services/notification_service.dart';
+
 import 'package:mbbsfreaks/view_mode.dart';
 
 class NotificationsPage extends StatefulWidget {
@@ -27,10 +29,13 @@ class _NotificationsPageState extends State<NotificationsPage> {
     _checkAdminStatus();
   }
 
- Future<void> _checkAdminStatus() async {
+Future<void> _checkAdminStatus() async {
   final user = _auth.currentUser;
   if (user == null) {
-    setState(() => _loading = false);
+    setState(() {
+      _isAdmin = false;
+      _loading = false;
+    });
     return;
   }
 
@@ -40,20 +45,24 @@ class _NotificationsPageState extends State<NotificationsPage> {
       .get();
 
   if (!userDoc.exists) {
-    setState(() => _loading = false);
+    setState(() {
+      _isAdmin = false;
+      _loading = false;
+    });
     return;
   }
 
   final role = userDoc.data()?['role'] ?? 'user';
 
-  // allow ALL admin types
-  final isAdminRole = role == 'admin' || role == 'power_admin' || role == 'super_admin';
+  final isAdminRole =
+      role == 'admin' || role == 'power_admin' || role == 'super_admin';
 
   setState(() {
-    _isAdmin = isAdminRole && !ViewMode.isUserMode;
+  _isAdmin = isAdminRole;  // <-- You missed this line!
     _loading = false;
   });
 }
+
 
 
   String _formatTimestamp(Timestamp? timestamp) {

@@ -122,7 +122,7 @@ class _QuizPageState extends State<QuizPage> {
 
         appBar: AppBar(
 
-          title: Text(selectedSubjectName != null ? "${selectedSubjectName!} Quizzes" : "Quizzes"),
+          title: Text(selectedSubjectName != null ? "${selectedSubjectName!} Quiz" : "Quiz"),
 
           backgroundColor: Colors.red.shade600,
 
@@ -204,7 +204,7 @@ class _QuizPageState extends State<QuizPage> {
 
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-        const Text("Select Year for Quizzes", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const Text("Select Year for Quiz", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
 
         const SizedBox(height: 12),
 
