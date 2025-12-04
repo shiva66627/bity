@@ -43,3 +43,56 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# ========================================
+# 🔒 SECURITY: Sensitive Files
+# ========================================
+
+# Firebase Configuration Files (contains API keys)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+
+# Cloud Functions Configuration (contains Razorpay keys)
+functions/config.json
+functions/.env
+functions/.env.local
+
+# Environment Variables
+.env
+.env.local
+.env.production
+.env.development
+*.env
+
+# API Keys and Secrets
+**/secrets.json
+**/api-keys.json
+**/credentials.json
+
+# Service Account Keys
+**/service-account-*.json
+**/firebase-adminsdk-*.json
+
+# Local Configuration
+config.local.json
+config.prod.json
+
+# iOS Provisioning Profiles & Certificates
+ios/**/*.mobileprovision
+ios/**/*.p12
+ios/**/*.cer
+ios/**/*.certSigningRequest
+
+# Android Keystore
+*.jks
+*.keystore
+key.properties
+keystore.properties
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.fleet/
+

@@ -1,0 +1,6 @@
+{
+    "razorpay": {
+        "key": "YOUR_RAZORPAY_KEY_HERE",
+        "secret": "YOUR_RAZORPAY_SECRET_HERE"
+    }
+}
